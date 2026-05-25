@@ -5,6 +5,7 @@ import LoginScreen from './screens/LoginScreen'
 import HomeScreen from './screens/HomeScreen'
 import RecordScreen from './screens/record/RecordScreen'
 import DiagnosisScreen from './screens/diagnosis/DiagnosisScreen'
+import GuideScreen from './screens/guide/GuideScreen'
 
 type Screen = 'home' | 'record' | 'diagnose' | 'guide' | 'check' | 'chat'
 
@@ -34,6 +35,7 @@ function App() {
   if (!user) return <LoginScreen />
 
   switch (screen) {
+    case 'guide': return <GuideScreen onNavigate={navigate} />
     case 'diagnose': return <DiagnosisScreen onNavigate={navigate} />
     case 'record': return <RecordScreen onNavigate={navigate} />
     default:       return <HomeScreen onNavigate={navigate} />
