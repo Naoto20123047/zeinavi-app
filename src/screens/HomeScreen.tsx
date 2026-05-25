@@ -56,24 +56,28 @@ const MENU_ITEMS = [
     label: 'ケース別ガイド',
     sub: 'バイト・業務委託・フリマ',
     iconBg: 'bg-teal-500',
+    screen: '',
   },
   {
     icon: Icons.record,
     label: '収入・経費の記録',
     sub: '毎月の入出金を記録',
     iconBg: 'bg-orange-500',
+    screen: 'record',
   },
   {
     icon: Icons.chat,
     label: 'AIチャット',
     sub: '疑問をすぐ相談',
     iconBg: 'bg-sky-500',
+    screen: '',
   },
   {
     icon: Icons.check,
     label: '書類チェック',
     sub: '源泉徴収票・マイナンバー',
     iconBg: 'bg-slate-500',
+    screen: '',
   },
 ]
 
@@ -109,9 +113,12 @@ function IncomeBar() {
 }
 
 // ── 診断CTAカード ────────────────────────────────────────
-function DiagnosisCTA() {
+function DiagnosisCTA({ onNavigate }: { onNavigate: (screen: string) => void }) {
   return (
-    <button className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 active:scale-95 transition-all">
+    <button
+      onClick={() => onNavigate('diagnose')}
+      className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
+    >
       <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0 text-white">
         {Icons.diagnose}
       </div>
@@ -147,7 +154,7 @@ function DeadlineCard() {
 }
 
 // ── メニューリスト ───────────────────────────────────────
-function MenuList() {
+function MenuList({ onNavigate }: { onNavigate: (screen: string) => void }) {
   return (
     <div>
       <p className="text-gray-400 text-xs font-semibold tracking-wider mb-3 px-1">
@@ -157,6 +164,7 @@ function MenuList() {
         {MENU_ITEMS.map((item) => (
           <button
             key={item.label}
+            onClick={() => { if (item.screen) onNavigate(item.screen) }}
             className="flex items-center gap-4 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
           >
             <div className={`w-10 h-10 ${item.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 text-white`}>
@@ -175,7 +183,13 @@ function MenuList() {
 }
 
 // ── ボトムナビ（モバイル） ───────────────────────────────
-function BottomNav({ active }: { active: string }) {
+function BottomNav({
+  active,
+  onNavigate,
+}: {
+  active: string
+  onNavigate: (screen: string) => void
+}) {
   const items = [
     { id: 'home',     label: 'ホーム',     icon: Icons.home     },
     { id: 'diagnose', label: '診断',       icon: Icons.diagnose },
@@ -188,6 +202,7 @@ function BottomNav({ active }: { active: string }) {
       {items.map((item) => (
         <button
           key={item.id}
+          onClick={() => onNavigate(item.id)}
           className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs transition-colors ${
             active === item.id ? 'text-sky-500' : 'text-gray-400'
           }`}
@@ -204,7 +219,13 @@ function BottomNav({ active }: { active: string }) {
 }
 
 // ── サイドバー（デスクトップ） ───────────────────────────
-function Sidebar({ active }: { active: string }) {
+function Sidebar({
+  active,
+  onNavigate,
+}: {
+  active: string
+  onNavigate: (screen: string) => void
+}) {
   const items = [
     { id: 'home',     label: 'ホーム',        icon: Icons.home     },
     { id: 'diagnose', label: '確定申告診断',   icon: Icons.diagnose },
@@ -231,6 +252,7 @@ function Sidebar({ active }: { active: string }) {
         {items.map((item) => (
           <button
             key={item.id}
+            onClick={() => onNavigate(item.id)}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
               active === item.id
                 ? 'bg-sky-500/10 text-sky-400 font-semibold border-l-2 border-sky-500'
@@ -265,7 +287,7 @@ function Sidebar({ active }: { active: string }) {
 }
 
 // ── メインコンポーネント ────────────────────────────────
-export default function HomeScreen() {
+export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
   return (
     <>
       {/* ══ モバイル表示 ══ */}
@@ -292,22 +314,22 @@ export default function HomeScreen() {
         {/* スクロールエリア */}
         <div className="px-4 pt-4 pb-28 flex flex-col gap-3">
           <IncomeBar />
-          <DiagnosisCTA />
+          <DiagnosisCTA onNavigate={onNavigate} />
           <DeadlineCard />
-          <MenuList />
+          <MenuList onNavigate={onNavigate} />
           <p className="text-gray-400 text-xs text-center pt-2 leading-relaxed">
             ※ 本アプリの情報は参考情報です。<br />
             最終的な判断は税務署または税理士にご相談ください。
           </p>
         </div>
 
-        <BottomNav active="home" />
+        <BottomNav active="home" onNavigate={onNavigate} />
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
       <div className="hidden md:flex min-h-screen bg-gray-100">
 
-        <Sidebar active="home" />
+        <Sidebar active="home" onNavigate={onNavigate} />
 
         {/* メインエリア */}
         <div className="flex-1 overflow-auto flex flex-col min-h-screen">
@@ -337,7 +359,7 @@ export default function HomeScreen() {
               <div className="col-span-3 flex flex-col gap-4">
                 <IncomeBar />
                 <div className="grid grid-cols-2 gap-3">
-                  <DiagnosisCTA />
+                  <DiagnosisCTA onNavigate={onNavigate} />
                   <DeadlineCard />
                 </div>
                 <div>
@@ -348,6 +370,7 @@ export default function HomeScreen() {
                     {MENU_ITEMS.map((item) => (
                       <button
                         key={item.label}
+                        onClick={() => { if (item.screen) onNavigate(item.screen) }}
                         className="flex items-center gap-3 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 transition-all"
                       >
                         <div className={`w-10 h-10 ${item.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 text-white`}>
@@ -424,14 +447,16 @@ export default function HomeScreen() {
               </div>
             </div>
           </div>
+
           {/* 免責事項 */}
-          <div className = "mt-auto py-6">
-          <p className="text-gray-400 text-xs text-center leading-relaxed mt-8 pb-4">
-                  ※ 本アプリの情報は参考情報です。最終的な判断は税務署または税理士にご相談ください。
+          <div className="mt-auto py-6">
+            <p className="text-gray-400 text-xs text-center leading-relaxed">
+              ※ 本アプリの情報は参考情報です。最終的な判断は税務署または税理士にご相談ください。
             </p>
+          </div>
+
         </div>
       </div>
-    </div>
     </>
   )
 }
