@@ -609,7 +609,7 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
-      <div className="hidden md:flex min-h-screen bg-gray-100">
+      <div className="hidden md:flex h-screen bg-gray-100">
 
         <Sidebar onNavigate={onNavigate} />
 
