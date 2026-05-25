@@ -7,6 +7,7 @@ import RecordScreen from './screens/record/RecordScreen'
 import DiagnosisScreen from './screens/diagnosis/DiagnosisScreen'
 import GuideScreen from './screens/guide/GuideScreen'
 import ChecklistScreen from './screens/checklist/ChecklistScreen'
+import ChatScreen from './screens/ai-chat/ChatScreen'
 
 type Screen = 'home' | 'record' | 'diagnose' | 'guide' | 'check' | 'chat'
 
@@ -36,6 +37,7 @@ function App() {
   if (!user) return <LoginScreen />
 
   switch (screen) {
+    case 'chat': return <ChatScreen onNavigate={navigate} />
     case 'check': return <ChecklistScreen onNavigate={navigate} />
     case 'guide': return <GuideScreen onNavigate={navigate} />
     case 'diagnose': return <DiagnosisScreen onNavigate={navigate} />
