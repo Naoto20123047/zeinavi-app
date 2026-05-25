@@ -4,6 +4,7 @@ import { onAuthStateChanged, type User } from 'firebase/auth'
 import LoginScreen from './screens/LoginScreen'
 import HomeScreen from './screens/HomeScreen'
 import RecordScreen from './screens/record/RecordScreen'
+import DiagnosisScreen from './screens/diagnosis/DiagnosisScreen'
 
 type Screen = 'home' | 'record' | 'diagnose' | 'guide' | 'check' | 'chat'
 
@@ -33,6 +34,7 @@ function App() {
   if (!user) return <LoginScreen />
 
   switch (screen) {
+    case 'diagnose': return <DiagnosisScreen onNavigate={navigate} />
     case 'record': return <RecordScreen onNavigate={navigate} />
     default:       return <HomeScreen onNavigate={navigate} />
   }
