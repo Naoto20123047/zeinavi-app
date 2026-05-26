@@ -1,3 +1,4 @@
+import { useIncomes } from '../hooks/useRecords'
 import { auth } from '../lib/firebase'
 
 // ── アイコン定義 ────────────────────────────────────────
@@ -51,42 +52,28 @@ const Icons = {
 
 // ── メニューアイテム定義 ─────────────────────────────────
 const MENU_ITEMS = [
-  {
-    icon: Icons.book,
-    label: 'ケース別ガイド',
-    sub: 'バイト・業務委託・フリマ',
-    iconBg: 'bg-teal-500',
-    screen: '',
-  },
-  {
-    icon: Icons.record,
-    label: '収入・経費の記録',
-    sub: '毎月の入出金を記録',
-    iconBg: 'bg-orange-500',
-    screen: 'record',
-  },
-  {
-    icon: Icons.chat,
-    label: 'AIチャット',
-    sub: '疑問をすぐ相談',
-    iconBg: 'bg-sky-500',
-    screen: '',
-  },
-  {
-    icon: Icons.check,
-    label: '書類チェック',
-    sub: '源泉徴収票・マイナンバー',
-    iconBg: 'bg-slate-500',
-    screen: '',
-  },
+  { icon: Icons.book,   label: 'ケース別ガイド',   sub: 'バイト・業務委託・フリマ', iconBg: 'bg-teal-500',   screen: 'guide'  },
+  { icon: Icons.record, label: '収入・経費の記録', sub: '毎月の入出金を記録',       iconBg: 'bg-orange-500', screen: 'record' },
+  { icon: Icons.chat,   label: 'AIチャット',       sub: '疑問をすぐ相談',           iconBg: 'bg-sky-500',    screen: 'chat'   },
+  { icon: Icons.check,  label: '書類チェック',     sub: '源泉徴収票・マイナンバー', iconBg: 'bg-slate-500',  screen: 'check'  },
 ]
 
 // ── 収入プログレスバー ────────────────────────────────────
 function IncomeBar() {
-  const current = 420000
+  const { incomes, loading } = useIncomes()
   const limit   = 1300000
-  const pct     = Math.round((current / limit) * 100)
-  const remain  = limit - current
+  const current = incomes.reduce((s, r) => s + r.amount, 0)
+  const pct     = Math.min(Math.round((current / limit) * 100), 100)
+  const remain  = Math.max(limit - current, 0)
+  const isOver  = current > limit
+
+  if (loading) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <p className="text-gray-400 text-xs text-center py-2">読み込み中...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
@@ -95,19 +82,22 @@ function IncomeBar() {
         <span className="text-gray-400 text-xs">130万円まで</span>
       </div>
       <div className="flex items-baseline justify-between mb-3">
-        <span className="text-gray-900 text-2xl font-bold">
+        <span className={`text-2xl font-bold ${isOver ? 'text-red-500' : 'text-gray-900'}`}>
           ¥{current.toLocaleString()}
         </span>
         <span className="text-gray-400 text-sm">
-          残り ¥{remain.toLocaleString()}
+          {isOver ? '⚠️ 上限超過' : `残り ¥${remain.toLocaleString()}`}
         </span>
       </div>
       <div className="w-full bg-gray-200 rounded-full h-1.5">
         <div
-          className="bg-sky-500 h-1.5 rounded-full transition-all"
+          className={`h-1.5 rounded-full transition-all ${isOver ? 'bg-red-500' : 'bg-sky-500'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
+      {current === 0 && (
+        <p className="text-gray-400 text-xs mt-2">収入を記録すると表示されます</p>
+      )}
     </div>
   )
 }
@@ -136,6 +126,11 @@ function DiagnosisCTA({ onNavigate }: { onNavigate: (screen: string) => void }) 
 
 // ── 期限カード ───────────────────────────────────────────
 function DeadlineCard() {
+  const deadline    = new Date('2027-03-15')
+  const today       = new Date()
+  const diffMs      = deadline.getTime() - today.getTime()
+  const daysLeft    = Math.max(Math.ceil(diffMs / (1000 * 60 * 60 * 24)), 0)
+
   return (
     <button className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 active:scale-95 transition-all">
       <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0 text-white">
@@ -144,7 +139,7 @@ function DeadlineCard() {
       <div className="flex-1">
         <p className="text-gray-400 text-xs mb-0.5">今年の確定申告期限まで</p>
         <p className="text-gray-900 font-bold text-lg leading-tight">
-          あと <span className="text-2xl">150</span>日
+          あと <span className="text-2xl">{daysLeft}</span>日
         </p>
         <p className="text-gray-400 text-xs mt-0.5">締め切り 2027年3月15日</p>
       </div>
@@ -236,17 +231,15 @@ function Sidebar({
   ]
   return (
     <div className="w-56 flex-shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col p-4">
-      {/* ロゴ */}
       <div className="flex items-center gap-3 px-2 mb-8 mt-2">
         <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-white">
           {Icons.diagnose}
         </div>
         <div>
           <p className="text-white text-sm font-bold leading-none">確定申告ナビ</p>
+          <p className="text-sky-400 text-xs">学生向け PWA</p>
         </div>
       </div>
-
-      {/* ナビ */}
       <nav className="flex flex-col gap-1 flex-1">
         <p className="text-slate-500 text-xs font-semibold px-3 mb-2 tracking-wider">MENU</p>
         {items.map((item) => (
@@ -264,8 +257,6 @@ function Sidebar({
           </button>
         ))}
       </nav>
-
-      {/* ユーザー情報 */}
       <div className="border-t border-slate-700 pt-4 flex items-center gap-3 px-2">
         <div className="w-8 h-8 bg-gradient-to-br from-sky-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
           <span className="text-white text-xs font-bold">
@@ -288,6 +279,10 @@ function Sidebar({
 
 // ── メインコンポーネント ────────────────────────────────
 export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
+  const today = new Date().toLocaleDateString('ja-JP', {
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'
+  })
+
   return (
     <>
       {/* ══ モバイル表示 ══ */}
@@ -297,9 +292,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
         <div className="px-5 pt-14 pb-4 bg-slate-800">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-slate-400 text-xs font-semibold tracking-widest mb-1">
-                学生向け
-              </p>
+              <p className="text-slate-400 text-xs font-semibold tracking-widest mb-1">学生向け</p>
               <h1 className="text-white text-2xl font-bold">確定申告ナビ</h1>
             </div>
             <button
@@ -331,16 +324,13 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
 
         <Sidebar active="home" onNavigate={onNavigate} />
 
-        {/* メインエリア */}
         <div className="flex-1 overflow-auto flex flex-col min-h-screen">
 
           {/* ページヘッダー */}
           <div className="flex justify-between items-center px-8 py-5 bg-slate-800 border-b border-slate-700">
             <div>
               <h2 className="text-white text-xl font-bold">ホーム</h2>
-              <p className="text-slate-400 text-sm mt-0.5">
-                2026年5月14日（木）
-              </p>
+              <p className="text-slate-400 text-sm mt-0.5">{today}</p>
             </div>
             <button
               onClick={() => auth.signOut()}
@@ -363,9 +353,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
                   <DeadlineCard />
                 </div>
                 <div>
-                  <p className="text-gray-500 text-xs font-semibold tracking-wider mb-3 px-1">
-                    メニュー
-                  </p>
+                  <p className="text-gray-500 text-xs font-semibold tracking-wider mb-3 px-1">メニュー</p>
                   <div className="grid grid-cols-2 gap-3">
                     {MENU_ITEMS.map((item) => (
                       <button
@@ -397,7 +385,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
                   <div className="flex flex-col gap-3">
                     {[
                       { label: '所得税の壁', amount: '178万円', color: 'text-sky-500',    note: '2026年分〜', changed: true  },
-                      { label: '住民税の壁', amount: '110万円', color: 'text-purple-500', note: '2025年分〜', changed: true  },
+                      { label: '住民税の壁', amount: '110万円', color: 'text-purple-500', note: '110万円超から課税', changed: true  },
                       { label: '社保の扶養', amount: '130万円', color: 'text-amber-500',  note: '変更無し',  changed: false },
                     ].map((w) => (
                       <div key={w.label} className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
@@ -408,9 +396,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
                         <div className="text-right">
                           <p className={`${w.color} text-sm font-bold`}>{w.amount}</p>
                           {w.changed && (
-                            <span className="text-xs bg-sky-50 text-sky-500 px-1.5 py-0.5 rounded-md">
-                              改正
-                            </span>
+                            <span className="text-xs bg-sky-50 text-sky-500 px-1.5 py-0.5 rounded-md">改正</span>
                           )}
                         </div>
                       </div>
@@ -420,19 +406,13 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
 
                 {/* お知らせカード */}
                 <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-                  <p className="text-gray-400 text-xs font-semibold tracking-wider mb-4">
-                    お知らせ
-                  </p>
+                  <p className="text-gray-400 text-xs font-semibold tracking-wider mb-4">お知らせ</p>
                   <div className="flex flex-col gap-3">
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
                       <span className="text-base flex-shrink-0">⚠️</span>
                       <div>
-                        <p className="text-amber-700 text-xs font-semibold">
-                          確定申告期限まで残り150日
-                        </p>
-                        <p className="text-amber-500 text-xs mt-0.5">
-                          締め切り 2027年3月15日
-                        </p>
+                        <p className="text-amber-700 text-xs font-semibold">確定申告期限まで残り{Math.max(Math.ceil((new Date('2027-03-15').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)), 0)}日</p>
+                        <p className="text-amber-500 text-xs mt-0.5">締め切り 2027年3月15日</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
@@ -443,7 +423,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
                     </div>
                   </div>
                 </div>
-
               </div>
             </div>
           </div>
@@ -454,7 +433,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string
               ※ 本アプリの情報は参考情報です。最終的な判断は税務署または税理士にご相談ください。
             </p>
           </div>
-
         </div>
       </div>
     </>

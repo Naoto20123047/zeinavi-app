@@ -1,5 +1,5 @@
-import { useState } from 'react'
 import { auth } from '../../lib/firebase'
+import { useChecklist } from '../../hooks/useChecklist'
 
 // ── アイコン ─────────────────────────────────────────────
 const NavIcons = {
@@ -40,27 +40,27 @@ const CATEGORIES: CheckCategory[] = [
   {
     id: 'deduction', emoji: '📋', label: '控除関連書類',
     items: [
-      { id:'nenkin',      label:'国民年金保険料の控除証明書',   sub:'日本年金機構から10〜11月に郵送される',        required: false },
-      { id:'kokuho',      label:'国民健康保険料の支払い証明',   sub:'自治体の納付書または通知書で確認',            required: false },
-      { id:'life_ins',    label:'生命保険料控除証明書',         sub:'保険会社から10月頃に郵送される',              required: false },
-      { id:'medical',     label:'医療費の領収書・明細書',       sub:'年間10万円超の医療費がある場合（交通費含む）', required: false },
-      { id:'furusato',    label:'寄附金受領証明書',             sub:'ふるさと納税等を行った場合',                  required: false },
-      { id:'disability',  label:'障害者手帳',                   sub:'障害者控除を申請する場合',                    required: false },
+      { id:'nenkin',     label:'国民年金保険料の控除証明書', sub:'日本年金機構から10〜11月に郵送される',        required: false },
+      { id:'kokuho',     label:'国民健康保険料の支払い証明', sub:'自治体の納付書または通知書で確認',            required: false },
+      { id:'life_ins',   label:'生命保険料控除証明書',       sub:'保険会社から10月頃に郵送される',              required: false },
+      { id:'medical',    label:'医療費の領収書・明細書',     sub:'年間10万円超の医療費がある場合（交通費含む）', required: false },
+      { id:'furusato',   label:'寄附金受領証明書',           sub:'ふるさと納税等を行った場合',                  required: false },
+      { id:'disability', label:'障害者手帳',                 sub:'障害者控除を申請する場合',                    required: false },
     ],
   },
   {
     id: 'identity', emoji: '🪪', label: '本人確認書類',
     items: [
-      { id:'mynum',    label:'マイナンバーカード',          sub:'e-Taxでの申告に必要・最も便利',           required: true  },
-      { id:'bankbook', label:'銀行口座情報',               sub:'還付金の振込先として必要（通帳またはメモ）', required: true  },
+      { id:'mynum',    label:'マイナンバーカード', sub:'e-Taxでの申告に必要・最も便利',            required: true },
+      { id:'bankbook', label:'銀行口座情報',       sub:'還付金の振込先として必要（通帳またはメモ）', required: true },
     ],
   },
   {
     id: 'expense', emoji: '🧾', label: '経費の証明書類（業務委託・フリマの場合）',
     items: [
-      { id:'receipt',    label:'領収書・レシート',    sub:'業務に関わる経費の証明（交通費・通信費・機材費等）', required: false },
-      { id:'transport',  label:'交通費の記録',        sub:'業務で使用した交通費の日付・区間・金額の記録',       required: false },
-      { id:'comm_bill',  label:'通信費の請求書',      sub:'仕事で使用した割合分を按分して経費計上',             required: false },
+      { id:'receipt',   label:'領収書・レシート', sub:'業務に関わる経費の証明（交通費・通信費・機材費等）', required: false },
+      { id:'transport', label:'交通費の記録',     sub:'業務で使用した交通費の日付・区間・金額の記録',       required: false },
+      { id:'comm_bill', label:'通信費の請求書',   sub:'仕事で使用した割合分を按分して経費計上',             required: false },
     ],
   },
 ]
@@ -137,7 +137,7 @@ function BottomNav({ onNavigate }: { onNavigate: (s: string) => void }) {
 function ProgressBar({ checked, total, required, requiredDone }: {
   checked: number; total: number; required: number; requiredDone: number
 }) {
-  const pct = total === 0 ? 0 : Math.round((checked / total) * 100)
+  const pct             = total === 0 ? 0 : Math.round((checked / total) * 100)
   const allRequiredDone = requiredDone === required
 
   return (
@@ -149,10 +149,8 @@ function ProgressBar({ checked, total, required, requiredDone }: {
         <span className="text-xs text-gray-400">全体 {checked}/{total}</span>
       </div>
       <div className="w-full bg-gray-200 rounded-full h-1.5">
-        <div
-          className={`h-1.5 rounded-full transition-all ${allRequiredDone ? 'bg-teal-500' : 'bg-sky-500'}`}
-          style={{ width: `${pct}%` }}
-        />
+        <div className={`h-1.5 rounded-full transition-all ${allRequiredDone ? 'bg-teal-500' : 'bg-sky-500'}`}
+          style={{ width:`${pct}%` }} />
       </div>
       {allRequiredDone && checked > 0 && (
         <p className="text-teal-600 text-xs font-semibold mt-1.5">✅ 必須書類がすべて揃いました！</p>
@@ -168,9 +166,7 @@ function CheckItemRow({ item, checked, onToggle }: {
   return (
     <button onClick={onToggle}
       className={`w-full flex items-center gap-3 p-4 rounded-2xl border text-left transition-all ${
-        checked
-          ? 'bg-teal-50 border-teal-200'
-          : 'bg-white border-gray-200 hover:bg-gray-50'
+        checked ? 'bg-teal-50 border-teal-200' : 'bg-white border-gray-200 hover:bg-gray-50'
       }`}>
       <div className={`w-6 h-6 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-all ${
         checked ? 'bg-teal-500 border-teal-500' : 'border-gray-300'
@@ -201,17 +197,7 @@ function CheckItemRow({ item, checked, onToggle }: {
 // ── メインコンポーネント ─────────────────────────────────
 export default function ChecklistScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const allItems = CATEGORIES.flatMap((c) => c.items)
-  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
-
-  const toggle = (id: string) => {
-    setCheckedIds((prev) => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
-  const reset = () => setCheckedIds(new Set())
+  const { checkedIds, loading, toggle, reset } = useChecklist()
 
   const checkedCount      = checkedIds.size
   const totalCount        = allItems.length
@@ -250,35 +236,40 @@ export default function ChecklistScreen({ onNavigate }: { onNavigate: (screen: s
 
         {/* リスト */}
         <div className="flex-1 overflow-auto px-4 py-4 pb-24">
-          {CATEGORIES.map((cat) => (
-            <div key={cat.id} className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">{cat.emoji}</span>
-                <p className="text-sm font-bold text-gray-700">{cat.label}</p>
-              </div>
-              <div className="flex flex-col gap-2">
-                {cat.items.map((item) => (
-                  <CheckItemRow
-                    key={item.id} item={item}
-                    checked={checkedIds.has(item.id)}
-                    onToggle={() => toggle(item.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+          {loading ? (
+            <p className="text-gray-400 text-sm text-center py-12">読み込み中...</p>
+          ) : (
+            <>
+              {CATEGORIES.map((cat) => (
+                <div key={cat.id} className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">{cat.emoji}</span>
+                    <p className="text-sm font-bold text-gray-700">{cat.label}</p>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {cat.items.map((item) => (
+                      <CheckItemRow
+                        key={item.id} item={item}
+                        checked={checkedIds.has(item.id)}
+                        onToggle={() => toggle(item.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
 
-          {/* 保管期間メモ */}
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
-            <p className="text-amber-700 text-xs font-semibold mb-1">📁 書類の保管期間</p>
-            <p className="text-amber-600 text-xs leading-relaxed">
-              確定申告に使用した書類は5年間保管する義務があります。領収書・源泉徴収票はファイルにまとめて保管しましょう。
-            </p>
-          </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+                <p className="text-amber-700 text-xs font-semibold mb-1">📁 書類の保管期間</p>
+                <p className="text-amber-600 text-xs leading-relaxed">
+                  確定申告に使用した書類は5年間保管する義務があります。領収書・源泉徴収票はファイルにまとめて保管しましょう。
+                </p>
+              </div>
 
-          <p className="text-gray-400 text-xs text-center leading-relaxed pb-2">
-            ※ 本アプリの情報は参考情報です。<br />最終的な判断は税務署または税理士にご相談ください。
-          </p>
+              <p className="text-gray-400 text-xs text-center leading-relaxed pb-2">
+                ※ 本アプリの情報は参考情報です。<br />最終的な判断は税務署または税理士にご相談ください。
+              </p>
+            </>
+          )}
         </div>
 
         <BottomNav onNavigate={onNavigate} />
@@ -313,23 +304,27 @@ export default function ChecklistScreen({ onNavigate }: { onNavigate: (screen: s
 
               {/* 左：チェックリスト（3/5） */}
               <div className="col-span-3 flex flex-col gap-6">
-                {CATEGORIES.map((cat) => (
-                  <div key={cat.id}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-lg">{cat.emoji}</span>
-                      <p className="text-sm font-bold text-gray-700">{cat.label}</p>
+                {loading ? (
+                  <p className="text-gray-400 text-sm text-center py-12">読み込み中...</p>
+                ) : (
+                  CATEGORIES.map((cat) => (
+                    <div key={cat.id}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">{cat.emoji}</span>
+                        <p className="text-sm font-bold text-gray-700">{cat.label}</p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {cat.items.map((item) => (
+                          <CheckItemRow
+                            key={item.id} item={item}
+                            checked={checkedIds.has(item.id)}
+                            onToggle={() => toggle(item.id)}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      {cat.items.map((item) => (
-                        <CheckItemRow
-                          key={item.id} item={item}
-                          checked={checkedIds.has(item.id)}
-                          onToggle={() => toggle(item.id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
 
               {/* 右：進捗・メモ（2/5） */}
