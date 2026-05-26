@@ -1,26 +1,9 @@
 import { useState } from 'react'
 import { auth } from '../../lib/firebase'
+import { useIncomes, useExpenses } from '../../hooks/useRecords'
+import type { IncomeType, ExpenseType } from '../../hooks/useRecords'
 
-// ── 型定義 ──────────────────────────────────────────────
-type IncomeType = 'アルバイト' | '業務委託' | 'フリマ' | 'その他'
-type ExpenseType = '交通費' | '通信費' | '機材費' | '書籍費' | 'その他'
-
-interface IncomeRecord {
-  id: number
-  type: IncomeType
-  amount: number
-  from: string
-  date: string
-}
-
-interface ExpenseRecord {
-  id: number
-  type: ExpenseType
-  amount: number
-  memo: string
-  date: string
-}
-
+// ── カラー定義 ───────────────────────────────────────────
 const INCOME_COLORS: Record<IncomeType, string> = {
   'アルバイト': 'bg-sky-500',
   '業務委託':   'bg-teal-500',
@@ -36,19 +19,6 @@ const EXPENSE_COLORS: Record<ExpenseType, string> = {
   'その他': 'bg-gray-500',
 }
 
-const INITIAL_INCOMES: IncomeRecord[] = [
-  { id: 1, type: 'アルバイト', amount: 120000, from: '〇〇カフェ', date: '2026/5/15' },
-  { id: 2, type: '業務委託',   amount: 50000,  from: '〇〇カフェ', date: '2026/5/15' },
-  { id: 3, type: 'アルバイト', amount: 110000, from: '〇〇カフェ', date: '2026/5/15' },
-  { id: 4, type: 'アルバイト', amount: 140000, from: '〇〇カフェ', date: '2026/4/15' },
-]
-
-const INITIAL_EXPENSES: ExpenseRecord[] = [
-  { id: 1, type: '交通費', amount: 3200, memo: '取材交通費',   date: '2026/5/15' },
-  { id: 2, type: '通信費', amount: 2000, memo: 'スマホ代',     date: '2026/5/15' },
-  { id: 3, type: '機材費', amount: 1000, memo: 'ケーブル購入', date: '2026/5/15' },
-]
-
 // ── アイコン ─────────────────────────────────────────────
 const BackIcon = () => (
   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -62,42 +32,20 @@ const PlusIcon = () => (
   </svg>
 )
 
+const TrashIcon = () => (
+  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+)
+
 const NavIcons = {
-  logout: (
-    <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-    </svg>
-  ),
-  home: (
-    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-    </svg>
-  ),
-  diagnose: (
-    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-    </svg>
-  ),
-  book: (
-    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-    </svg>
-  ),
-  check: (
-    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  chat: (
-    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-    </svg>
-  ),
-  record: (
-    <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-    </svg>
-  ),
+  logout: (<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>),
+  home:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>),
+  diagnose: (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>),
+  book:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>),
+  check:    (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
+  chat:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>),
+  record:   (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>),
 }
 
 // ── サイドバー ───────────────────────────────────────────
@@ -124,33 +72,22 @@ function Sidebar({ onNavigate }: { onNavigate: (screen: string) => void }) {
       <nav className="flex flex-col gap-1 flex-1">
         <p className="text-slate-500 text-xs font-semibold px-3 mb-2 tracking-wider">MENU</p>
         {items.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => onNavigate(item.id)}
+          <button key={item.id} onClick={() => onNavigate(item.id)}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
               item.id === 'record'
                 ? 'bg-sky-500/10 text-sky-400 font-semibold border-l-2 border-sky-500'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border-l-2 border-transparent'
-            }`}
-          >
-            {item.icon}
-            {item.label}
+            }`}>
+            {item.icon}{item.label}
           </button>
         ))}
       </nav>
       <div className="border-t border-slate-700 pt-4 flex items-center gap-3 px-2">
         <div className="w-8 h-8 bg-gradient-to-br from-sky-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold">
-            {auth.currentUser?.email?.[0].toUpperCase()}
-          </span>
+          <span className="text-white text-xs font-bold">{auth.currentUser?.email?.[0].toUpperCase()}</span>
         </div>
-        <p className="text-slate-400 text-xs flex-1 truncate">
-          {auth.currentUser?.email}
-        </p>
-        <button
-          onClick={() => auth.signOut()}
-          className="text-slate-500 hover:text-slate-300 transition-colors"
-        >
+        <p className="text-slate-400 text-xs flex-1 truncate">{auth.currentUser?.email}</p>
+        <button onClick={() => auth.signOut()} className="text-slate-500 hover:text-slate-300 transition-colors">
           {NavIcons.logout}
         </button>
       </div>
@@ -160,11 +97,10 @@ function Sidebar({ onNavigate }: { onNavigate: (screen: string) => void }) {
 
 // ── 収入登録モーダル ─────────────────────────────────────
 function IncomeModal({
-  onClose,
-  onSave,
+  onClose, onSave,
 }: {
   onClose: () => void
-  onSave: (record: Omit<IncomeRecord, 'id'>) => void
+  onSave: (record: { type: IncomeType; amount: number; from: string; date: string }) => void
 }) {
   const [type, setType]     = useState<IncomeType>('アルバイト')
   const [amount, setAmount] = useState('')
@@ -215,11 +151,10 @@ function IncomeModal({
 
 // ── 経費登録モーダル ─────────────────────────────────────
 function ExpenseModal({
-  onClose,
-  onSave,
+  onClose, onSave,
 }: {
   onClose: () => void
-  onSave: (record: Omit<ExpenseRecord, 'id'>) => void
+  onSave: (record: { type: ExpenseType; amount: number; memo: string; date: string }) => void
 }) {
   const [type, setType]     = useState<ExpenseType>('交通費')
   const [amount, setAmount] = useState('')
@@ -270,17 +205,17 @@ function ExpenseModal({
 
 // ── メインコンポーネント ─────────────────────────────────
 export default function RecordScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
-  const [tab, setTab]           = useState<'income' | 'expense'>('income')
-  const [incomes, setIncomes]   = useState<IncomeRecord[]>(INITIAL_INCOMES)
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>(INITIAL_EXPENSES)
+  const [tab, setTab]             = useState<'income' | 'expense'>('income')
   const [showModal, setShowModal] = useState(false)
+
+  const { incomes, loading: incomeLoading, addIncome, deleteIncome }    = useIncomes()
+  const { expenses, loading: expenseLoading, addExpense, deleteExpense } = useExpenses()
 
   const totalIncome  = incomes.reduce((s, r) => s + r.amount, 0)
   const totalExpense = expenses.reduce((s, r) => s + r.amount, 0)
   const totalBalance = totalIncome - totalExpense
 
-  const addIncome  = (r: Omit<IncomeRecord,  'id'>) => setIncomes( (p) => [{ ...r, id: Date.now() }, ...p])
-  const addExpense = (r: Omit<ExpenseRecord, 'id'>) => setExpenses((p) => [{ ...r, id: Date.now() }, ...p])
+  const isLoading = incomeLoading || expenseLoading
 
   return (
     <>
@@ -326,35 +261,47 @@ export default function RecordScreen({ onNavigate }: { onNavigate: (screen: stri
 
         {/* リスト */}
         <div className="flex-1 overflow-auto px-4 pt-4 pb-32">
-          <div className="flex flex-col gap-2">
-            {tab === 'income' ? (
-              incomes.length === 0
-                ? <p className="text-gray-400 text-sm text-center py-12">収入記録がありません</p>
-                : incomes.map((item) => (
-                  <div key={item.id} className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                    <span className={`${INCOME_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg flex-shrink-0`}>{item.type}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-400 text-xs">{item.date}</p>
-                      <p className="text-gray-500 text-xs truncate">{item.from}</p>
+          {isLoading ? (
+            <p className="text-gray-400 text-sm text-center py-12">読み込み中...</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {tab === 'income' ? (
+                incomes.length === 0
+                  ? <p className="text-gray-400 text-sm text-center py-12">収入記録がありません</p>
+                  : incomes.map((item) => (
+                    <div key={item.id} className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                      <span className={`${INCOME_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg flex-shrink-0`}>{item.type}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-400 text-xs">{item.date}</p>
+                        <p className="text-gray-500 text-xs truncate">{item.from}</p>
+                      </div>
+                      <p className="text-gray-900 font-bold text-sm flex-shrink-0">¥{item.amount.toLocaleString()}</p>
+                      <button onClick={() => deleteIncome(item.id)}
+                        className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0">
+                        <TrashIcon />
+                      </button>
                     </div>
-                    <p className="text-gray-900 font-bold text-sm flex-shrink-0">¥{item.amount.toLocaleString()}</p>
-                  </div>
-                ))
-            ) : (
-              expenses.length === 0
-                ? <p className="text-gray-400 text-sm text-center py-12">経費記録がありません</p>
-                : expenses.map((item) => (
-                  <div key={item.id} className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                    <span className={`${EXPENSE_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg flex-shrink-0`}>{item.type}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-400 text-xs">{item.date}</p>
-                      <p className="text-gray-500 text-xs truncate">{item.memo}</p>
+                  ))
+              ) : (
+                expenses.length === 0
+                  ? <p className="text-gray-400 text-sm text-center py-12">経費記録がありません</p>
+                  : expenses.map((item) => (
+                    <div key={item.id} className="bg-white border border-gray-200 rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
+                      <span className={`${EXPENSE_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg flex-shrink-0`}>{item.type}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-gray-400 text-xs">{item.date}</p>
+                        <p className="text-gray-500 text-xs truncate">{item.memo}</p>
+                      </div>
+                      <p className="text-gray-900 font-bold text-sm flex-shrink-0">¥{item.amount.toLocaleString()}</p>
+                      <button onClick={() => deleteExpense(item.id)}
+                        className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0">
+                        <TrashIcon />
+                      </button>
                     </div>
-                    <p className="text-gray-900 font-bold text-sm flex-shrink-0">¥{item.amount.toLocaleString()}</p>
-                  </div>
-                ))
-            )}
-          </div>
+                  ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* フローティングボタン */}
@@ -372,37 +319,28 @@ export default function RecordScreen({ onNavigate }: { onNavigate: (screen: stri
             { id: 'guide',    label: 'ガイド',     icon: NavIcons.book     },
             { id: 'chat',     label: 'AIチャット', icon: NavIcons.chat     },
           ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
+            <button key={item.id} onClick={() => onNavigate(item.id)}
               className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs transition-colors ${
                 item.id === 'record' ? 'text-sky-500' : 'text-gray-400'
-              }`}
-            >
+              }`}>
               {item.icon}
               <span>{item.label}</span>
-              {item.id === 'record' && (
-                <span className="w-1 h-1 rounded-full bg-sky-500" />
-              )}
+              {item.id === 'record' && <span className="w-1 h-1 rounded-full bg-sky-500" />}
             </button>
           ))}
         </div>
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
-      <div className="hidden md:flex min-h-screen bg-gray-100">
-
-        {/* サイドバー */}
+      <div className="hidden md:flex h-screen bg-gray-100">
         <Sidebar onNavigate={onNavigate} />
-
-        {/* メインエリア */}
         <div className="flex-1 flex flex-col overflow-auto">
 
           {/* ページヘッダー */}
           <div className="flex justify-between items-center px-8 py-5 bg-slate-800 border-b border-slate-700">
             <div>
               <h2 className="text-white text-xl font-bold">収入・経費記録</h2>
-              <p className="text-slate-400 text-sm mt-0.5">2026年5月14日（木）</p>
+              <p className="text-slate-400 text-sm mt-0.5">{new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}</p>
             </div>
             <button onClick={() => setShowModal(true)}
               className="flex items-center gap-2 bg-sky-500 hover:bg-sky-400 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors">
@@ -440,37 +378,55 @@ export default function RecordScreen({ onNavigate }: { onNavigate: (screen: stri
                   経費記録
                 </button>
               </div>
-              <div className="grid grid-cols-4 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-200">
+              <div className="grid grid-cols-5 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-200">
                 <p className="text-gray-400 text-xs font-semibold">種別</p>
                 <p className="text-gray-400 text-xs font-semibold">日付</p>
                 <p className="text-gray-400 text-xs font-semibold">{tab === 'income' ? '振り込み元' : 'メモ'}</p>
                 <p className="text-gray-400 text-xs font-semibold text-right">金額</p>
+                <p className="text-gray-400 text-xs font-semibold text-right">操作</p>
               </div>
-              <div className="divide-y divide-gray-100">
-                {tab === 'income' ? (
-                  incomes.length === 0
-                    ? <p className="text-gray-400 text-sm text-center py-12">収入記録がありません</p>
-                    : incomes.map((item) => (
-                      <div key={item.id} className="grid grid-cols-4 gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
-                        <span className={`${INCOME_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg w-fit`}>{item.type}</span>
-                        <p className="text-gray-500 text-sm self-center">{item.date}</p>
-                        <p className="text-gray-700 text-sm self-center truncate">{item.from}</p>
-                        <p className="text-gray-900 font-bold text-sm text-right self-center">¥{item.amount.toLocaleString()}</p>
-                      </div>
-                    ))
-                ) : (
-                  expenses.length === 0
-                    ? <p className="text-gray-400 text-sm text-center py-12">経費記録がありません</p>
-                    : expenses.map((item) => (
-                      <div key={item.id} className="grid grid-cols-4 gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
-                        <span className={`${EXPENSE_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg w-fit`}>{item.type}</span>
-                        <p className="text-gray-500 text-sm self-center">{item.date}</p>
-                        <p className="text-gray-700 text-sm self-center truncate">{item.memo}</p>
-                        <p className="text-gray-900 font-bold text-sm text-right self-center">¥{item.amount.toLocaleString()}</p>
-                      </div>
-                    ))
-                )}
-              </div>
+
+              {isLoading ? (
+                <p className="text-gray-400 text-sm text-center py-12">読み込み中...</p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {tab === 'income' ? (
+                    incomes.length === 0
+                      ? <p className="text-gray-400 text-sm text-center py-12">収入記録がありません</p>
+                      : incomes.map((item) => (
+                        <div key={item.id} className="grid grid-cols-5 gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+                          <span className={`${INCOME_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg w-fit`}>{item.type}</span>
+                          <p className="text-gray-500 text-sm self-center">{item.date}</p>
+                          <p className="text-gray-700 text-sm self-center truncate">{item.from}</p>
+                          <p className="text-gray-900 font-bold text-sm text-right self-center">¥{item.amount.toLocaleString()}</p>
+                          <div className="flex justify-end self-center">
+                            <button onClick={() => deleteIncome(item.id)}
+                              className="text-gray-300 hover:text-red-400 transition-colors">
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                  ) : (
+                    expenses.length === 0
+                      ? <p className="text-gray-400 text-sm text-center py-12">経費記録がありません</p>
+                      : expenses.map((item) => (
+                        <div key={item.id} className="grid grid-cols-5 gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
+                          <span className={`${EXPENSE_COLORS[item.type]} text-white text-xs font-semibold px-2.5 py-1 rounded-lg w-fit`}>{item.type}</span>
+                          <p className="text-gray-500 text-sm self-center">{item.date}</p>
+                          <p className="text-gray-700 text-sm self-center truncate">{item.memo}</p>
+                          <p className="text-gray-900 font-bold text-sm text-right self-center">¥{item.amount.toLocaleString()}</p>
+                          <div className="flex justify-end self-center">
+                            <button onClick={() => deleteExpense(item.id)}
+                              className="text-gray-300 hover:text-red-400 transition-colors">
+                              <TrashIcon />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
