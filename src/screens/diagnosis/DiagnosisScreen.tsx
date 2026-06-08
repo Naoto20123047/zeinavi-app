@@ -1,20 +1,10 @@
 import { useState } from 'react'
 import { auth } from '../../lib/firebase'
+import { useDiagnosisResults } from '../../hooks/useDiagnosisResult'
+import type { ResultType, DiagnosisAnswers } from '../../hooks/useDiagnosisResult'
 
 // ── 型定義 ──────────────────────────────────────────────
-interface Answers {
-  schoolType:      string
-  enrollment:      string
-  incomeTypes:     string[]
-  jobCount:        string
-  yearEndAdj:      string
-  salaryRange:     string
-  sideIncome:      string
-  healthInsurance: string
-  taxDependent:    string
-  deductions:      string[]
-  workerStudent:   string
-}
+type Answers = DiagnosisAnswers
 
 const INITIAL_ANSWERS: Answers = {
   schoolType: '', enrollment: '', incomeTypes: [], jobCount: '',
@@ -23,8 +13,6 @@ const INITIAL_ANSWERS: Answers = {
 }
 
 // ── 診断結果の計算 ───────────────────────────────────────
-type ResultType = 'noNeed' | 'refund' | 'refundDeduction' | 'needMultiJob' | 'needSideIncome' | 'gray'
-
 function calcResult(a: Answers): ResultType {
   const hasSide      = a.incomeTypes.includes('freelance') || a.incomeTypes.includes('flea')
   const hasPartTime  = a.incomeTypes.includes('part')
@@ -34,11 +22,11 @@ function calcResult(a: Answers): ResultType {
   const over178      = a.salaryRange === 'over178'
   const hasDeduction = a.deductions.length > 0 && !a.deductions.includes('none')
 
-  if (hasSide && sideOver20)               return 'needSideIncome'
-  if (over178)                             return 'needSideIncome'
-  if (hasPartTime && multiJob)             return 'needMultiJob'
-  if (unadjusted)                         return 'refund'
-  if (hasDeduction)                       return 'refundDeduction'
+  if (hasSide && sideOver20)                return 'needSideIncome'
+  if (over178)                              return 'needSideIncome'
+  if (hasPartTime && multiJob)              return 'needMultiJob'
+  if (unadjusted)                          return 'refund'
+  if (hasDeduction)                        return 'refundDeduction'
   if (hasSide && !sideOver20 && unadjusted) return 'gray'
   return 'noNeed'
 }
@@ -80,9 +68,7 @@ function Sidebar({ onNavigate }: { onNavigate: (s: string) => void }) {
   return (
     <div className="w-56 flex-shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col p-4">
       <div className="flex items-center gap-3 px-2 mb-8 mt-2">
-        <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-white">
-          {NavIcons.diagnose}
-        </div>
+        <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-white">{NavIcons.diagnose}</div>
         <div>
           <p className="text-white text-sm font-bold leading-none">確定申告ナビ</p>
           <p className="text-sky-400 text-xs">学生向け PWA</p>
@@ -106,9 +92,7 @@ function Sidebar({ onNavigate }: { onNavigate: (s: string) => void }) {
           <span className="text-white text-xs font-bold">{auth.currentUser?.email?.[0].toUpperCase()}</span>
         </div>
         <p className="text-slate-400 text-xs flex-1 truncate">{auth.currentUser?.email}</p>
-        <button onClick={() => auth.signOut()} className="text-slate-500 hover:text-slate-300 transition-colors">
-          {NavIcons.logout}
-        </button>
+        <button onClick={() => auth.signOut()} className="text-slate-500 hover:text-slate-300 transition-colors">{NavIcons.logout}</button>
       </div>
     </div>
   )
@@ -517,6 +501,9 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
   const [step, setStep]       = useState(1)
   const [answers, setAnswers] = useState<Answers>(INITIAL_ANSWERS)
   const [done, setDone]       = useState(false)
+  const [saving, setSaving]   = useState(false)
+
+  const { saveResult } = useDiagnosisResults()
 
   const hasSide = answers.incomeTypes.includes('freelance') || answers.incomeTypes.includes('flea')
   const hasPart = answers.incomeTypes.includes('part')
@@ -525,10 +512,21 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
   const update = (key: keyof Answers, value: string | string[]) =>
     setAnswers((prev) => ({ ...prev, [key]: value }))
 
-  const next = () => {
+  const finishDiagnosis = async (currentAnswers: Answers) => {
+    setSaving(true)
+    const resultType = calcResult(currentAnswers)
+    await saveResult(resultType, currentAnswers)
+    setSaving(false)
+    setDone(true)
+  }
+
+  const next = async () => {
     if (step === 2 && !hasPart) { setStep(4); return }
     if (step === 5 && !hasSide) { setStep(7); return }
-    if (step >= 8)              { setDone(true); return }
+    if (step >= 8) {
+      await finishDiagnosis(answers)
+      return
+    }
     setStep((s) => s + 1)
   }
 
@@ -560,7 +558,7 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
       {step === 6 && <Step6 {...stepProps} />}
       {step === 7 && <Step7 {...stepProps} />}
       {step === 8 && <Step8 {...stepProps} />}
-      {step === 9 && <Step9 {...stepProps} onNext={() => setDone(true)} />}
+      {step === 9 && <Step9 {...stepProps} onNext={() => finishDiagnosis(answers)} />}
     </>
   )
 
@@ -568,8 +566,6 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
     <>
       {/* ══ モバイル表示 ══ */}
       <div className="md:hidden min-h-screen bg-gray-100 flex flex-col">
-
-        {/* ヘッダー */}
         <div className="bg-slate-800 px-5 pt-14 pb-4">
           <div className="flex items-center gap-3">
             <button onClick={back}
@@ -583,7 +579,6 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
           </div>
         </div>
 
-        {/* プログレスバー */}
         {!done && (
           <div className="px-5 py-3 bg-white border-b border-gray-200">
             <div className="flex justify-between mb-1.5">
@@ -597,12 +592,16 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
           </div>
         )}
 
-        {/* コンテンツ */}
         <div className="flex-1 overflow-auto px-4 py-4 pb-24">
-          {done
-            ? <DiagnosisResult answers={answers} onRestart={restart} onNavigate={onNavigate} />
-            : <StepContent />
-          }
+          {saving ? (
+            <div className="flex items-center justify-center py-20">
+              <p className="text-gray-400 text-sm">保存中...</p>
+            </div>
+          ) : done ? (
+            <DiagnosisResult answers={answers} onRestart={restart} onNavigate={onNavigate} />
+          ) : (
+            <StepContent />
+          )}
         </div>
 
         <BottomNav onNavigate={onNavigate} />
@@ -610,12 +609,8 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
 
       {/* ══ デスクトップ表示 ══ */}
       <div className="hidden md:flex h-screen bg-gray-100">
-
         <Sidebar onNavigate={onNavigate} />
-
         <div className="flex-1 flex flex-col overflow-auto">
-
-          {/* ページヘッダー */}
           <div className="flex items-center gap-4 px-8 py-5 bg-slate-800 border-b border-slate-700">
             <button onClick={back}
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400 flex-shrink-0">
@@ -627,7 +622,6 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
             </div>
           </div>
 
-          {/* プログレスバー */}
           {!done && (
             <div className="px-8 py-4 bg-white border-b border-gray-200">
               <div className="flex justify-between mb-2">
@@ -641,24 +635,21 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
             </div>
           )}
 
-          {/* コンテンツ */}
           <div className="flex-1 p-8">
-            {done ? (
+            {saving ? (
+              <div className="flex items-center justify-center py-20">
+                <p className="text-gray-400 text-sm">保存中...</p>
+              </div>
+            ) : done ? (
               <div className="max-w-2xl mx-auto">
                 <DiagnosisResult answers={answers} onRestart={restart} onNavigate={onNavigate} />
               </div>
             ) : (
               <div className="max-w-5xl grid grid-cols-5 gap-8">
-
-                {/* 左：STEPフォーム（3/5） */}
                 <div className="col-span-3">
                   <StepContent />
                 </div>
-
-                {/* 右：進捗・税制ヒント（2/5） */}
                 <div className="col-span-2 flex flex-col gap-4">
-
-                  {/* STEP一覧 */}
                   <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
                     <p className="text-xs font-semibold text-gray-400 tracking-wider mb-4">診断の流れ</p>
                     <div className="flex flex-col gap-2">
@@ -691,8 +682,6 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
                         })}
                     </div>
                   </div>
-
-                  {/* 2026年税制メモ */}
                   <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
                     <p className="text-xs font-semibold text-gray-400 tracking-wider mb-4">2026年の主な変更点</p>
                     <div className="flex flex-col gap-3">
