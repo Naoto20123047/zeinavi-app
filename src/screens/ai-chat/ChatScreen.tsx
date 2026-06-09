@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { auth } from '../../lib/firebase'
+import { useChatUsage } from '../../hooks/useChatUsage'
 
 // ── アイコン ─────────────────────────────────────────────
 const NavIcons = {
@@ -31,35 +32,71 @@ const QUICK_QUESTIONS = [
   'e-Taxの使い方を教えて',
 ]
 
-// ── デモレスポンス ───────────────────────────────────────
-function getDemoResponse(question: string): string {
-  const q = question
+// ── システムプロンプト ────────────────────────────────────
+const SYSTEM_PROMPT = `日本の確定申告AIアシスタントです。学生のバイト・業務委託・フリマ収入に関する質問に簡潔に答えます。2026年税制：所得税の壁178万円、住民税110万円、社保130万円。末尾に必ず「⚠️ 具体的な判断は税務署または税理士にご相談ください。」を付けること。確定申告と無関係な質問は断ること。日本語で回答すること。`
 
-  if (q.includes('178万') || q.includes('103万') || q.includes('壁')) {
-    return '【2026年最新】年収の壁についてお答えします。\n\n📋 所得税の壁：178万円\n年収178万円まで所得税はかかりません（年収200万円以下の場合）。2026年分から適用です。\n\n📋 住民税の壁：110万円\n110万円を超えると住民税が課税されます。\n\n📋 社保の扶養：130万円\n130万円を超えると親の社会保険の扶養から外れます（19〜22歳は150万円）。\n\n⚠️ 具体的な判断は税務署にご確認ください。'
+// ── Gemini API呼び出し ────────────────────────────────────
+async function callGeminiAPI(
+  userMessage: string,
+  history: Message[],
+  onRetry: (waitSec: number) => void
+): Promise<string> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY
+  if (!apiKey) throw new Error('APIキーが設定されていません')
+
+  const recentHistory = history.slice(-3)
+
+  const contents = [
+    { role: 'user',  parts: [{ text: SYSTEM_PROMPT }] },
+    { role: 'model', parts: [{ text: 'はい、確定申告に関するご質問にお答えします。' }] },
+    ...recentHistory.map((msg) => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.text }],
+    })),
+    { role: 'user', parts: [{ text: userMessage }] },
+  ]
+
+  const MAX_RETRY = 3
+
+  for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+    const res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({ contents }),
+      }
+    )
+
+    if (res.status === 429 || res.status === 503) {
+      const errBody = await res.json().catch(() => ({}))
+      console.error('エラー詳細:', JSON.stringify(errBody))
+
+      if (attempt < MAX_RETRY - 1) {
+        const retryDelaySec = errBody?.error?.details
+          ?.find((d: { retryDelay?: string }) => d.retryDelay)
+          ?.retryDelay?.replace('s', '')
+        const waitSec = retryDelaySec ? Math.ceil(parseFloat(retryDelaySec)) + 3 : 35
+        onRetry(waitSec)
+        console.log(`${waitSec}秒後にリトライします`)
+        await new Promise((r) => setTimeout(r, waitSec * 1000))
+        continue
+      }
+      throw new Error('しばらく時間をおいてから再度お試しください。')
+    }
+
+    if (!res.ok) throw new Error(`APIエラー: ${res.status}`)
+
+    const data = await res.json()
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!text) throw new Error('レスポンスが空です')
+    return text
   }
 
-  if (q.includes('掛け持ち') || q.includes('複数') || q.includes('バイト')) {
-    return '掛け持ちバイトの確定申告についてお答えします。\n\n📋 原則として申告が必要です\n複数のバイト先がある場合、メインのバイト先以外は「乙欄」で高めに源泉徴収されています。確定申告で精算することで還付を受けられる可能性があります。\n\n📋 必要なもの\n・全バイト先の源泉徴収票\n・マイナンバーカード\n・銀行口座情報\n\n📋 申告方法\ne-Taxで申告書を作成し、すべての源泉徴収票の内容を入力します。\n\n⚠️ 具体的な判断は税務署にご確認ください。'
-  }
-
-  if (q.includes('源泉徴収票') || q.includes('見方')) {
-    return '源泉徴収票の主な項目の見方をお答えします。\n\n📋 支払金額\n年間の給与総額です。確定申告ではこの金額を使います。\n\n📋 給与所得控除後の金額\n支払金額から給与所得控除を引いた金額です。\n\n📋 所得控除の額の合計額\n年末調整で適用された各種控除の合計です。\n\n📋 源泉徴収税額\nすでに引かれた所得税の金額です。還付申告ではこの金額が戻ってくる場合があります。\n\n⚠️ 不明な点は発行元の会社または税務署にご確認ください。'
-  }
-
-  if (q.includes('経費') || q.includes('業務委託') || q.includes('フリーランス')) {
-    return '業務委託・フリーランスの経費についてお答えします。\n\n📋 経費として認められる主なもの\n✅ 交通費（業務に直接関わるもの）\n✅ 通信費（仕事で使う割合分）\n✅ PC・機材費（仕事で使うもの）\n✅ 書籍・セミナー費用（業務関連）\n✅ 消耗品費（仕事で使う文具等）\n\n📋 注意点\n・領収書・レシートを必ず保管してください\n・プライベートと兼用の場合は按分が必要です\n・経費 = 収入から差し引ける金額です\n\n⚠️ 経費の判断は税務署または税理士にご相談ください。'
-  }
-
-  if (q.includes('還付') || q.includes('振り込み') || q.includes('いつ')) {
-    return '還付金の振り込み時期についてお答えします。\n\n📋 e-Tax（電子申告）の場合\n申告後おおよそ3週間で振り込まれます。\n\n📋 書面申告の場合\n申告後1〜2か月で振り込まれます。\n\n📋 振込先\n申告書に記載した銀行口座に振り込まれます。事前に口座情報を確認しておきましょう。\n\n📋 還付申告の期限\n1月1日から5年間いつでも申告できます。期限を過ぎると還付を受けられなくなります。\n\n⚠️ 具体的な時期は税務署にご確認ください。'
-  }
-
-  if (q.includes('e-Tax') || q.includes('etax') || q.includes('電子申告')) {
-    return 'e-Taxの使い方についてお答えします。\n\n📋 e-Taxとは\n国税庁が提供するインターネットで確定申告できるサービスです。\n\n📋 必要なもの\n・マイナンバーカード\n・ICカードリーダーまたはスマートフォン\n\n📋 手順\n① 国税庁「確定申告書等作成コーナー」にアクセス\n② マイナンバーカードでログイン\n③ 案内に従って収入・控除を入力\n④ 内容を確認して送信\n\n📋 メリット\n・24時間365日申告可能\n・還付金の処理が書面より早い\n・添付書類の一部省略可能\n\n⚠️ 詳しくは国税庁のサイトをご確認ください。'
-  }
-
-  return 'ご質問ありがとうございます。確定申告についての詳細は、国税庁のサイトや税務署への相談をおすすめします。\n\nこのアプリの「ケース別ガイド」や「確定申告診断」も参考にしてみてください。\n\n⚠️ 本アプリの情報はあくまで参考情報です。最終的な判断は税務署または税理士にご相談ください。'
+  throw new Error('リクエストに失敗しました。')
 }
 
 // ── サイドバー ───────────────────────────────────────────
@@ -152,19 +189,25 @@ function MessageBubble({ message }: { message: Message }) {
 }
 
 // ── ローディングバブル ───────────────────────────────────
-function LoadingBubble() {
+function LoadingBubble({ retrying, waitSec }: { retrying?: boolean; waitSec?: number }) {
   return (
     <div className="flex gap-2">
       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-500 to-purple-500 flex items-center justify-center flex-shrink-0">
         <span className="text-white text-xs">🤖</span>
       </div>
       <div className="bg-white border border-gray-200 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-        <div className="flex gap-1 items-center">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"
-              style={{ animationDelay: `${i * 0.15}s` }} />
-          ))}
-        </div>
+        {retrying ? (
+          <p className="text-gray-400 text-xs">
+            混雑中のため再試行中{waitSec ? `（約${waitSec}秒待機）` : ''}...
+          </p>
+        ) : (
+          <div className="flex gap-1 items-center">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="w-2 h-2 bg-gray-300 rounded-full animate-bounce"
+                style={{ animationDelay: `${i * 0.15}s` }} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -172,18 +215,19 @@ function LoadingBubble() {
 
 // ── チャット本体 ─────────────────────────────────────────
 function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 0,
-      role: 'assistant',
-      text: 'こんにちは！確定申告ナビAIです。\n\n確定申告に関するご質問にお答えします。下のクイック質問からお選びいただくか、自由に入力してください。\n\n⚠️ 回答はあくまで参考情報です。正確な判断は税務署または税理士にご相談ください。',
-    },
-  ])
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [count, setCount]       = useState(0)
+  const INITIAL_MESSAGE: Message = {
+    id: 0,
+    role: 'assistant',
+    text: 'こんにちは！確定申告ナビAIです。\n\n確定申告に関するご質問にお答えします。下のクイック質問からお選びいただくか、自由に入力してください。\n\n⚠️ 回答はあくまで参考情報です。正確な判断は税務署または税理士にご相談ください。',
+  }
+
+  const [messages,  setMessages]  = useState<Message[]>([INITIAL_MESSAGE])
+  const [input,     setInput]     = useState('')
+  const [loading,   setLoading]   = useState(false)
+  const [retrying,  setRetrying]  = useState(false)
+  const [waitSec,   setWaitSec]   = useState<number | undefined>(undefined)
   const [showQuick, setShowQuick] = useState(true)
-  const MAX = 10
+  const { count, loading: usageLoading, increment, remaining, isLimit } = useChatUsage()
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -192,19 +236,37 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
 
   const sendMessage = async (text: string) => {
     const q = text.trim()
-    if (!q || loading || count >= MAX) return
+    if (!q || loading || isLimit || usageLoading) return
 
     setInput('')
     setShowQuick(false)
-    setCount((c) => c + 1)
-    setMessages((prev) => [...prev, { id: Date.now(), role: 'user', text: q }])
+    setRetrying(false)
+    setWaitSec(undefined)
+
+    const userMsg: Message = { id: Date.now(), role: 'user', text: q }
+    setMessages((prev) => [...prev, userMsg])
     setLoading(true)
 
-    // デモ用：1秒後にレスポンス（実際はAPI呼び出し）
-    await new Promise((r) => setTimeout(r, 1000))
-    const reply = getDemoResponse(q)
-    setMessages((prev) => [...prev, { id: Date.now() + 1, role: 'assistant', text: reply }])
-    setLoading(false)
+    await increment()
+
+    try {
+      const reply = await callGeminiAPI(q, messages, (sec) => {
+        setRetrying(true)
+        setWaitSec(sec)
+      })
+      setMessages((prev) => [...prev, { id: Date.now() + 1, role: 'assistant', text: reply }])
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '回答の取得に失敗しました。'
+      setMessages((prev) => [...prev, {
+        id: Date.now() + 1,
+        role: 'assistant',
+        text: `申し訳ありません。${msg}`,
+      }])
+    } finally {
+      setLoading(false)
+      setRetrying(false)
+      setWaitSec(undefined)
+    }
   }
 
   return (
@@ -217,7 +279,7 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
         ))}
 
         {/* クイック質問 */}
-        {showQuick && (
+        {showQuick && !isLimit && (
           <div className="flex flex-wrap gap-2 mt-2">
             {QUICK_QUESTIONS.map((q) => (
               <button key={q} onClick={() => sendMessage(q)}
@@ -228,13 +290,13 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
           </div>
         )}
 
-        {loading && <LoadingBubble />}
+        {loading && <LoadingBubble retrying={retrying} waitSec={waitSec} />}
 
         {/* 上限到達 */}
-        {count >= MAX && (
+        {isLimit && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
             <p className="text-amber-700 text-sm font-semibold mb-1">本日の質問上限に達しました</p>
-            <p className="text-amber-600 text-xs">ケース別ガイドや診断フローもご活用ください。</p>
+            <p className="text-amber-600 text-xs">明日またご利用ください。ケース別ガイドや診断フローもご活用ください。</p>
             <button onClick={() => onNavigate('guide')}
               className="mt-3 px-4 py-2 bg-slate-800 text-white text-xs rounded-xl">
               ガイドを見る
@@ -245,10 +307,15 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* 免責事項 */}
-      <p className="text-gray-400 text-xs text-center py-2 border-t border-gray-100">
-        ⚠️ 回答は参考情報です。税務判断は専門家にご相談ください。
-      </p>
+      {/* 残り回数 + 免責事項 */}
+      <div className="border-t border-gray-100 px-4 py-2 flex justify-between items-center">
+        <p className="text-gray-400 text-xs">⚠️ 回答は参考情報です。税務判断は専門家にご相談ください。</p>
+        {!isLimit && (
+          <span className="text-gray-400 text-xs flex-shrink-0">
+            {usageLoading ? '...' : `残り${remaining}回`}
+          </span>
+        )}
+      </div>
 
       {/* 入力エリア */}
       <div className="px-4 py-3 bg-white border-t border-gray-200 flex gap-2 items-end">
@@ -261,15 +328,15 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
               sendMessage(input)
             }
           }}
-          placeholder={count >= MAX ? '本日の上限に達しました' : '確定申告について質問する...'}
-          disabled={count >= MAX || loading}
+          placeholder={isLimit ? '本日の上限に達しました' : '確定申告について質問する...'}
+          disabled={isLimit || loading}
           rows={1}
           className="flex-1 resize-none border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-sky-400 placeholder-gray-300 disabled:bg-gray-50 disabled:cursor-not-allowed"
           style={{ maxHeight: 96 }}
         />
         <button
           onClick={() => sendMessage(input)}
-          disabled={!input.trim() || loading || count >= MAX}
+          disabled={!input.trim() || loading || isLimit}
           className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {NavIcons.send}
@@ -285,8 +352,6 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (screen: string
     <>
       {/* ══ モバイル表示 ══ */}
       <div className="md:hidden h-screen bg-gray-100 flex flex-col">
-
-        {/* ヘッダー */}
         <div className="bg-slate-800 px-5 pt-14 pb-4 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -300,7 +365,7 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (screen: string
               </div>
             </div>
             <div className="px-3 py-1 bg-slate-700 rounded-full border border-slate-600">
-              <span className="text-slate-300 text-xs">残り10回</span>
+              <span className="text-slate-300 text-xs">Gemini 2.5 Flash</span>
             </div>
           </div>
         </div>
@@ -313,83 +378,83 @@ export default function ChatScreen({ onNavigate }: { onNavigate: (screen: string
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
-<div className="hidden md:flex h-screen bg-gray-100">
-  <Sidebar onNavigate={onNavigate} />
-  <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="hidden md:flex h-screen bg-gray-100">
+        <Sidebar onNavigate={onNavigate} />
+        <div className="flex-1 flex flex-col overflow-hidden">
 
-    {/* ページヘッダー */}
-    <div className="flex items-center justify-between px-8 py-5 bg-slate-800 border-b border-slate-700 flex-shrink-0">
-      <div>
-        <h2 className="text-white text-xl font-bold">AIチャット</h2>
-        <p className="text-slate-400 text-sm mt-0.5">確定申告の疑問をAIに質問する</p>
-      </div>
-      <div className="px-4 py-2 bg-slate-700 rounded-xl border border-slate-600">
-        <span className="text-slate-300 text-sm">1日10回まで利用可能</span>
-      </div>
-    </div>
+          {/* ページヘッダー */}
+          <div className="flex items-center justify-between px-8 py-5 bg-slate-800 border-b border-slate-700 flex-shrink-0">
+            <div>
+              <h2 className="text-white text-xl font-bold">AIチャット</h2>
+              <p className="text-slate-400 text-sm mt-0.5">確定申告の疑問をAIに質問する</p>
+            </div>
+            <div className="px-4 py-2 bg-slate-700 rounded-xl border border-slate-600">
+              <span className="text-slate-300 text-sm">Gemini 2.5 Flash　1日10回まで</span>
+            </div>
+          </div>
 
-    {/* コンテンツ（2カラム） */}
-    <div className="flex-1 flex overflow-hidden p-6 gap-6">
+          {/* コンテンツ（2カラム） */}
+          <div className="flex-1 flex overflow-hidden p-6 gap-6">
 
-      {/* 左：チャット（3/5） */}
-      <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-        <ChatBody onNavigate={onNavigate} />
-      </div>
+            {/* 左：チャット */}
+            <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+              <ChatBody onNavigate={onNavigate} />
+            </div>
 
-      {/* 右：ヒント・リンク（2/5） */}
-      <div className="w-72 flex-shrink-0 flex flex-col gap-4">
+            {/* 右：ヒント・リンク */}
+            <div className="w-72 flex-shrink-0 flex flex-col gap-4">
 
-        {/* よくある質問 */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <p className="text-xs font-semibold text-gray-400 tracking-wider mb-3">よくある質問</p>
-          <div className="flex flex-col gap-2">
-            {QUICK_QUESTIONS.map((q) => (
-              <button key={q}
-                className="text-left text-xs text-sky-600 hover:text-sky-800 py-1.5 border-b border-gray-100 last:border-0 transition-colors">
-                {q}
-              </button>
-            ))}
+              {/* よくある質問 */}
+              <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                <p className="text-xs font-semibold text-gray-400 tracking-wider mb-3">よくある質問</p>
+                <div className="flex flex-col gap-2">
+                  {QUICK_QUESTIONS.map((q) => (
+                    <button key={q}
+                      className="text-left text-xs text-sky-600 hover:text-sky-800 py-1.5 border-b border-gray-100 last:border-0 transition-colors">
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 関連機能 */}
+              <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                <p className="text-xs font-semibold text-gray-400 tracking-wider mb-3">関連機能</p>
+                <div className="flex flex-col gap-2">
+                  <button onClick={() => onNavigate('diagnose')}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
+                    <span className="text-lg">📋</span>
+                    <div>
+                      <p className="text-gray-700 text-xs font-semibold">確定申告診断</p>
+                      <p className="text-gray-400 text-xs">申告が必要か7STEPで診断</p>
+                    </div>
+                  </button>
+                  <button onClick={() => onNavigate('guide')}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
+                    <span className="text-lg">📚</span>
+                    <div>
+                      <p className="text-gray-700 text-xs font-semibold">ケース別ガイド</p>
+                      <p className="text-gray-400 text-xs">状況別の申告手順を確認</p>
+                    </div>
+                  </button>
+                  <button onClick={() => onNavigate('check')}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
+                    <span className="text-lg">✅</span>
+                    <div>
+                      <p className="text-gray-700 text-xs font-semibold">書類チェックリスト</p>
+                      <p className="text-gray-400 text-xs">必要書類を確認する</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-gray-400 text-xs text-center leading-relaxed">
+                ※ AIの回答は参考情報です。<br />最終的な判断は税務署または税理士にご相談ください。
+              </p>
+            </div>
           </div>
         </div>
-
-        {/* 関連リンク */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <p className="text-xs font-semibold text-gray-400 tracking-wider mb-3">関連機能</p>
-          <div className="flex flex-col gap-2">
-            <button onClick={() => onNavigate('diagnose')}
-              className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
-              <span className="text-lg">📋</span>
-              <div>
-                <p className="text-gray-700 text-xs font-semibold">確定申告診断</p>
-                <p className="text-gray-400 text-xs">申告が必要か7STEPで診断</p>
-              </div>
-            </button>
-            <button onClick={() => onNavigate('guide')}
-              className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
-              <span className="text-lg">📚</span>
-              <div>
-                <p className="text-gray-700 text-xs font-semibold">ケース別ガイド</p>
-                <p className="text-gray-400 text-xs">状況別の申告手順を確認</p>
-              </div>
-            </button>
-            <button onClick={() => onNavigate('check')}
-              className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left">
-              <span className="text-lg">✅</span>
-              <div>
-                <p className="text-gray-700 text-xs font-semibold">書類チェックリスト</p>
-                <p className="text-gray-400 text-xs">必要書類を確認する</p>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        <p className="text-gray-400 text-xs text-center leading-relaxed">
-          ※ AIの回答は参考情報です。<br />最終的な判断は税務署または税理士にご相談ください。
-        </p>
       </div>
-    </div>
-  </div>
-</div>
     </>
   )
 }
