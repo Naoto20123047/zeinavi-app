@@ -327,7 +327,7 @@ function Sidebar({
         </div>
         <div>
           <p className="text-white text-sm font-bold leading-none">確定申告ナビ</p>
-          <p className="text-sky-400 text-xs">学生向け PWA</p>
+          <p className="text-sky-400 text-xs">学生向け</p>
         </div>
       </div>
       <nav className="flex flex-col gap-1 flex-1">

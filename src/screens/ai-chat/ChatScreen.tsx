@@ -227,7 +227,7 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
   const [retrying,  setRetrying]  = useState(false)
   const [waitSec,   setWaitSec]   = useState<number | undefined>(undefined)
   const [showQuick, setShowQuick] = useState(true)
-  const { count, loading: usageLoading, increment, remaining, isLimit } = useChatUsage()
+  const {loading: usageLoading, increment, remaining, isLimit } = useChatUsage()
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
