@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { auth } from '../../lib/firebase'
 import { useDiagnosisResults } from '../../hooks/useDiagnosisResult'
 import type { ResultType, DiagnosisAnswers } from '../../hooks/useDiagnosisResult'
+import { estimateTax } from '../../utils/taxEstimate'
+import type { EstimateInput, EstimateResult } from '../../utils/taxEstimate'
 
 // ── 型定義 ──────────────────────────────────────────────
 type Answers = DiagnosisAnswers
@@ -22,12 +24,11 @@ function calcResult(a: Answers): ResultType {
   const over178      = a.salaryRange === 'over178'
   const hasDeduction = a.deductions.length > 0 && !a.deductions.includes('none')
 
-  if (hasSide && sideOver20)                return 'needSideIncome'
-  if (over178)                              return 'needSideIncome'
-  if (hasPartTime && multiJob)              return 'needMultiJob'
-  if (unadjusted)                          return 'refund'
-  if (hasDeduction)                        return 'refundDeduction'
-  if (hasSide && !sideOver20 && unadjusted) return 'gray'
+  if (hasSide && sideOver20)   return 'needSideIncome'
+  if (hasPartTime && multiJob) return 'needMultiJob'
+  if (over178 && unadjusted)   return 'needSideIncome'
+  if (unadjusted)              return 'refund'
+  if (hasDeduction)            return 'refundDeduction'
   return 'noNeed'
 }
 
@@ -39,7 +40,7 @@ const RESULTS: Record<ResultType, {
   refund:          { emoji:'💰', label:'還付申告できます',  title:'払いすぎた税金が戻ってきます！',         desc:'年末調整が未実施または途中退職があった場合、源泉徴収で引かれすぎた税金が還付される可能性があります。1月1日から5年間いつでも申告できます。',  color:'text-sky-600',    bg:'bg-sky-50',    border:'border-sky-200',    action:'還付申告の手順を確認する'           },
   refundDeduction: { emoji:'💰', label:'控除で還付できます', title:'申告すれば税金が戻ってきます！',        desc:'医療費控除・社会保険料控除・生命保険料控除などの申告漏れがあります。確定申告することで税金が還付される可能性があります。',                 color:'text-purple-600', bg:'bg-purple-50', border:'border-purple-200', action:'控除の申告手順を確認する'           },
   needMultiJob:    { emoji:'⚠️', label:'申告が必要です',    title:'掛け持ちバイトは申告が必要です',         desc:'複数のバイト先がある場合、それぞれの給与を合算して申告する義務があります。期限内（3月15日まで）に申告してください。',                     color:'text-amber-600',  bg:'bg-amber-50',  border:'border-amber-200',  action:'掛け持ちバイトの申告手順を確認する' },
-  needSideIncome:  { emoji:'⚠️', label:'申告が必要です',    title:'確定申告が必要・納税の可能性があります', desc:'副業・フリマ収入が20万円超、または給与収入が178万円超のため確定申告が必要です。期限内（3月15日まで）に申告してください。',               color:'text-red-600',    bg:'bg-red-50',    border:'border-red-200',    action:'申告の手順をガイドで確認する'       },
+  needSideIncome:  { emoji:'⚠️', label:'申告が必要です',    title:'確定申告が必要・納税の可能性があります', desc:'副業・フリマ収入が20万円超、または給与収入が178万円超で年末調整が済んでいないため確定申告が必要です。期限内（3月15日まで）に申告してください。',               color:'text-red-600',    bg:'bg-red-50',    border:'border-red-200',    action:'申告の手順をガイドで確認する'       },
   gray:            { emoji:'🔍', label:'グレーゾーン',       title:'専門家への相談をおすすめします',         desc:'ご状況が複雑なため、税務署または税理士への相談をおすすめします。本アプリの情報はあくまで参考情報です。',                                  color:'text-gray-600',   bg:'bg-gray-50',   border:'border-gray-200',   action:'税務署・税理士に相談する'           },
 }
 
@@ -320,7 +321,7 @@ function Step6({ answers, onChange, onNext }: {
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <InfoBox text="業務委託・フリマの「所得」は、収入から経費（交通費・材料費等）を差し引いた金額です。20万円を超えると確定申告が必要になります。" />
+      <InfoBox text="業務委託・フリマの「所得」は、収入から経費（交通費・材料費等）を差し引いた金額です。年末調整を受けた給与所得者は、この所得が20万円を超えると確定申告が必要です。※給与収入がない場合は20万円ルールの対象外で、所得の合計が基礎控除の範囲内かどうかで判断します。" />
       <div className="flex flex-col gap-2">
         {[
           { value:'under20', label:'20万円以下', sub:'経費を差し引いた所得が20万円以下', emoji:'🟢' },
@@ -360,7 +361,7 @@ function Step7({ answers, onChange, onNext }: {
       </div>
       <div>
         <p className="text-sm font-semibold text-gray-700 mb-1">親の所得税の扶養に入っていますか？</p>
-        <p className="text-xs text-gray-400 mb-2">合計所得58万円以下（給与収入123万円以下）で扶養継続</p>
+        <p className="text-xs text-gray-400 mb-2">合計所得62万円以下（給与収入136万円以下）で扶養継続</p>
         <div className="flex flex-col gap-2">
           {[
             { value:'yes',     label:'入っている'  },
@@ -447,12 +448,187 @@ function Step9({ answers, onChange, onNext }: {
   )
 }
 
+// ── 金額入力フィールド（フォーム外で定義） ───────────────
+function MoneyField({ label, sub, value, onChange, placeholder }: {
+  label: string; sub?: string; value: string
+  onChange: (v: string) => void; placeholder: string
+}) {
+  return (
+    <div>
+      <label className="text-gray-700 text-sm font-medium block mb-1">{label}</label>
+      {sub && <p className="text-gray-400 text-xs mb-1.5">{sub}</p>}
+      <div className="relative">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full border border-gray-200 rounded-xl pl-4 pr-9 py-3 text-sm text-gray-900 outline-none focus:border-sky-500 placeholder-gray-300"
+        />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">円</span>
+      </div>
+    </div>
+  )
+}
+
+// ── 金額入力フォーム ─────────────────────────────────────
+function EstimateForm({ answers, onEstimate }: {
+  answers: Answers
+  onEstimate: (result: EstimateResult) => void
+}) {
+  const [salaryIncome,    setSalaryIncome]    = useState('')
+  const [withheldTax,     setWithheldTax]     = useState('')
+  const [sideIncome,      setSideIncome]      = useState('')
+  const [sideExpense,     setSideExpense]     = useState('')
+  const [socialInsurance, setSocialInsurance] = useState('')
+  const [lifeInsurance,   setLifeInsurance]   = useState('')
+  const [medicalExpense,  setMedicalExpense]  = useState('')
+  const [donation,        setDonation]        = useState('')
+
+  const hasSide = answers.incomeTypes.includes('freelance') || answers.incomeTypes.includes('flea')
+  const d = answers.deductions
+
+  const n = (s: string) => (s === '' ? 0 : Number(s.replace(/,/g, '')) || 0)
+
+  const handleEstimate = () => {
+    const input: EstimateInput = {
+      salaryIncome:    n(salaryIncome),
+      withheldTax:     n(withheldTax),
+      sideIncome:      hasSide ? n(sideIncome) : 0,
+      sideExpense:     hasSide ? n(sideExpense) : 0,
+      socialInsurance: d.includes('socialInsurance') ? n(socialInsurance) : 0,
+      lifeInsurance:   d.includes('lifeInsurance')   ? n(lifeInsurance)   : 0,
+      medicalExpense:  d.includes('medical')         ? n(medicalExpense)  : 0,
+      donation:        d.includes('donation')        ? n(donation)        : 0,
+      isWorkerStudent: answers.workerStudent === 'yes',
+      isDisabled:      d.includes('disabled'),
+    }
+    onEstimate(estimateTax(input))
+  }
+
+  const canEstimate = salaryIncome !== '' || sideIncome !== ''
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-5 flex flex-col gap-4">
+      <div>
+        <p className="text-gray-900 font-bold text-sm mb-1">金額を入力して試算する</p>
+        <p className="text-gray-400 text-xs">源泉徴収票や領収書を見ながら入力してください。空欄は0円として計算します。</p>
+      </div>
+
+      <MoneyField label="給与収入（年間）" sub="源泉徴収票の「支払金額」"
+        value={salaryIncome} onChange={setSalaryIncome} placeholder="例：1200000" />
+      <MoneyField label="源泉徴収税額" sub="源泉徴収票の「源泉徴収税額」・すでに引かれた所得税"
+        value={withheldTax} onChange={setWithheldTax} placeholder="例：15000" />
+
+      {hasSide && (
+        <>
+          <MoneyField label="業務委託・フリマの収入" sub="年間の売上・報酬の合計"
+            value={sideIncome} onChange={setSideIncome} placeholder="例：300000" />
+          <MoneyField label="その経費" sub="材料費・交通費・通信費など"
+            value={sideExpense} onChange={setSideExpense} placeholder="例：50000" />
+        </>
+      )}
+
+      {d.includes('socialInsurance') && (
+        <MoneyField label="国民年金・国保の支払額" sub="自分で支払った年間の保険料"
+          value={socialInsurance} onChange={setSocialInsurance} placeholder="例：200000" />
+      )}
+      {d.includes('lifeInsurance') && (
+        <MoneyField label="生命保険料（年間）" sub="保険会社の控除証明書の金額"
+          value={lifeInsurance} onChange={setLifeInsurance} placeholder="例：60000" />
+      )}
+      {d.includes('medical') && (
+        <MoneyField label="年間の医療費" sub="10万円を超えた分が控除対象"
+          value={medicalExpense} onChange={setMedicalExpense} placeholder="例：150000" />
+      )}
+      {d.includes('donation') && (
+        <MoneyField label="ふるさと納税・寄付額" sub="年間の寄付の合計"
+          value={donation} onChange={setDonation} placeholder="例：30000" />
+      )}
+
+      <button onClick={handleEstimate} disabled={!canEstimate}
+        className="w-full py-3.5 rounded-2xl text-sm font-bold bg-sky-500 hover:bg-sky-400 text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+        還付・納税額を試算する
+      </button>
+      <p className="text-gray-400 text-xs text-center leading-relaxed">
+        ※ 所得税のみの概算です。住民税および2026年の特例措置は含みません。正確な金額は税務署・税理士にご確認ください。
+      </p>
+    </div>
+  )
+}
+
+// ── 試算結果カード ───────────────────────────────────────
+function EstimateResultCard({ result }: { result: EstimateResult }) {
+  const isRefund  = result.type === 'refund'
+  const isPayment = result.type === 'payment'
+
+  return (
+    <div className={`rounded-2xl p-6 border ${
+      isRefund  ? 'bg-sky-50 border-sky-200'
+      : isPayment ? 'bg-red-50 border-red-200'
+      : 'bg-gray-50 border-gray-200'
+    }`}>
+      <div className="text-center mb-4">
+        <p className="text-gray-500 text-xs mb-1">
+          {isRefund ? '戻ってくる可能性がある金額' : isPayment ? '追加で納める可能性がある金額' : '試算結果'}
+        </p>
+        <div className="flex items-baseline justify-center gap-1">
+          <span className={`text-4xl font-bold ${
+            isRefund ? 'text-sky-600' : isPayment ? 'text-red-600' : 'text-gray-600'
+          }`}>
+            {isRefund ? '+' : isPayment ? '−' : ''}¥{result.amount.toLocaleString()}
+          </span>
+        </div>
+        <p className={`text-sm font-semibold mt-1 ${
+          isRefund ? 'text-sky-600' : isPayment ? 'text-red-600' : 'text-gray-500'
+        }`}>
+          {isRefund ? '💰 還付の可能性があります' : isPayment ? '⚠️ 追加納税の可能性があります' : '差額はありません'}
+        </p>
+      </div>
+
+      <div className="bg-white/70 rounded-xl p-4">
+        <p className="text-xs font-semibold text-gray-400 mb-2">試算の内訳</p>
+        <div className="flex justify-between py-1 text-xs">
+          <span className="text-gray-500">課税所得</span>
+          <span className="text-gray-700 font-medium">¥{result.taxableIncome.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between py-1 text-xs">
+          <span className="text-gray-500">本来の所得税額</span>
+          <span className="text-gray-700 font-medium">¥{result.calculatedTax.toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between py-1 text-xs border-t border-gray-100 mt-1 pt-2">
+          <span className="text-gray-500">控除の合計</span>
+          <span className="text-gray-700 font-medium">¥{result.totalDeduction.toLocaleString()}</span>
+        </div>
+      </div>
+
+      {result.breakdown.length > 0 && (
+        <div className="bg-white/70 rounded-xl p-4 mt-2">
+          <p className="text-xs font-semibold text-gray-400 mb-2">適用された控除</p>
+          {result.breakdown.map((b) => (
+            <div key={b.label} className="flex justify-between py-1 text-xs">
+              <span className="text-gray-500">{b.label}</span>
+              <span className="text-gray-700 font-medium">¥{b.value.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-gray-500 text-xs leading-relaxed mt-3">
+        ※ この試算は所得税の速算表に基づく概算です。「年収178万円まで非課税」は目安であり、住民税・その他の加算は含みません。
+      </p>
+    </div>
+  )
+}
+
 // ── 診断結果 ─────────────────────────────────────────────
 function DiagnosisResult({ answers, onRestart, onNavigate }: {
   answers: Answers; onRestart: () => void; onNavigate: (s: string) => void
 }) {
   const resultKey = calcResult(answers)
   const result    = RESULTS[resultKey]
+  const [estimate, setEstimate] = useState<EstimateResult | null>(null)
 
   return (
     <div className="flex flex-col gap-4">
@@ -464,6 +640,18 @@ function DiagnosisResult({ answers, onRestart, onNavigate }: {
         <h2 className={`text-lg font-bold ${result.color} mb-3`}>{result.title}</h2>
         <p className="text-gray-600 text-sm leading-relaxed">{result.desc}</p>
       </div>
+
+      {estimate ? (
+        <>
+          <EstimateResultCard result={estimate} />
+          <button onClick={() => setEstimate(null)}
+            className="w-full py-3 rounded-2xl text-sm text-gray-500 bg-gray-50 border border-gray-200">
+            金額を入力し直す
+          </button>
+        </>
+      ) : (
+        <EstimateForm answers={answers} onEstimate={setEstimate} />
+      )}
 
       <div className="bg-white border border-gray-200 rounded-2xl p-4">
         <p className="text-xs font-semibold text-gray-400 tracking-wider mb-3">入力内容の確認</p>
