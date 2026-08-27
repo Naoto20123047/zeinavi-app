@@ -6,6 +6,10 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
 } from 'firebase/auth'
+import { trackEvent, AnalyticsEvents } from '../lib/analytics'
+
+/** Firebase Auth の最小パスワード長 */
+const MIN_PASSWORD_LENGTH = 6
 
 const provider = new GoogleAuthProvider()
 
@@ -32,6 +36,10 @@ function LoginForm() {
       setError('メールアドレスとパスワードを入力してください')
       return
     }
+    if (mode === 'register' && password.length < MIN_PASSWORD_LENGTH) {
+      setError(`パスワードは${MIN_PASSWORD_LENGTH}文字以上で入力してください`)
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -39,6 +47,7 @@ function LoginForm() {
         await signInWithEmailAndPassword(auth, email, password)
       } else {
         await createUserWithEmailAndPassword(auth, email, password)
+        trackEvent(AnalyticsEvents.signUp, { method: 'password' })
       }
     } catch {
       setError(
@@ -96,14 +105,16 @@ function LoginForm() {
           type="email"
           placeholder="メールアドレス"
           value={email}
+          autoComplete="email"
           onChange={(e) => setEmail(e.target.value)}
           className="w-full bg-slate-700/80 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-sky-500 transition-colors"
         />
         <input
           type="password"
-          placeholder="パスワード（6文字以上）"
+          placeholder={`パスワード（${MIN_PASSWORD_LENGTH}文字以上）`}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
           className="w-full bg-slate-700/80 border border-slate-600 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-sky-500 transition-colors"
         />
 

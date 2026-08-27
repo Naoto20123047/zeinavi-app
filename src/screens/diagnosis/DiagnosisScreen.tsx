@@ -1,9 +1,19 @@
-import { useState } from 'react'
-import { auth } from '../../lib/firebase'
+import { useEffect, useState } from 'react'
 import { useDiagnosisResults } from '../../hooks/useDiagnosisResult'
 import type { ResultType, DiagnosisAnswers } from '../../hooks/useDiagnosisResult'
 import { estimateTax } from '../../utils/taxEstimate'
 import type { EstimateInput, EstimateResult } from '../../utils/taxEstimate'
+import Sidebar from '../../components/Sidebar'
+import BottomNav from '../../components/BottomNav'
+import { Icons } from '../../components/Icons'
+import {
+  WALL_LABELS,
+  formatMan,
+  FILING_DEADLINE_LABEL,
+  SPECIAL_RULE_SALARY_CAP,
+  SALARY_RANGE_LOWER,
+} from '../../config/taxConfig'
+import { trackEvent, AnalyticsEvents } from '../../lib/analytics'
 
 // ── 型定義 ──────────────────────────────────────────────
 type Answers = DiagnosisAnswers
@@ -39,90 +49,13 @@ const RESULTS: Record<ResultType, {
   noNeed:          { emoji:'✅', label:'申告不要',         title:'確定申告は不要です',                    desc:'現在の収入状況では確定申告の義務はありません。ただし控除の申告漏れがあると還付を受けられる場合もあります。',                              color:'text-teal-600',   bg:'bg-teal-50',   border:'border-teal-200',   action:'ケース別ガイドで詳しく確認する'     },
   refund:          { emoji:'💰', label:'還付申告できます',  title:'払いすぎた税金が戻ってきます！',         desc:'年末調整が未実施または途中退職があった場合、源泉徴収で引かれすぎた税金が還付される可能性があります。1月1日から5年間いつでも申告できます。',  color:'text-sky-600',    bg:'bg-sky-50',    border:'border-sky-200',    action:'還付申告の手順を確認する'           },
   refundDeduction: { emoji:'💰', label:'控除で還付できます', title:'申告すれば税金が戻ってきます！',        desc:'医療費控除・社会保険料控除・生命保険料控除などの申告漏れがあります。確定申告することで税金が還付される可能性があります。',                 color:'text-purple-600', bg:'bg-purple-50', border:'border-purple-200', action:'控除の申告手順を確認する'           },
-  needMultiJob:    { emoji:'⚠️', label:'申告が必要です',    title:'掛け持ちバイトは申告が必要です',         desc:'複数のバイト先がある場合、それぞれの給与を合算して申告する義務があります。期限内（3月15日まで）に申告してください。',                     color:'text-amber-600',  bg:'bg-amber-50',  border:'border-amber-200',  action:'掛け持ちバイトの申告手順を確認する' },
-  needSideIncome:  { emoji:'⚠️', label:'申告が必要です',    title:'確定申告が必要・納税の可能性があります', desc:'副業・フリマ収入が20万円超、または給与収入が178万円超で年末調整が済んでいないため確定申告が必要です。期限内（3月15日まで）に申告してください。',               color:'text-red-600',    bg:'bg-red-50',    border:'border-red-200',    action:'申告の手順をガイドで確認する'       },
+  needMultiJob:    { emoji:'⚠️', label:'申告が必要です',    title:'掛け持ちバイトは申告が必要です',         desc:`複数のバイト先がある場合、それぞれの給与を合算して申告する義務があります。期限内（${FILING_DEADLINE_LABEL}まで）に申告してください。`,                     color:'text-amber-600',  bg:'bg-amber-50',  border:'border-amber-200',  action:'掛け持ちバイトの申告手順を確認する' },
+  needSideIncome:  { emoji:'⚠️', label:'申告が必要です',    title:'確定申告が必要・納税の可能性があります', desc:`副業・フリマ収入が${WALL_LABELS.sideIncome}超、または給与収入が${WALL_LABELS.incomeTax}超で年末調整が済んでいないため確定申告が必要です。期限内（${FILING_DEADLINE_LABEL}まで）に申告してください。`,               color:'text-red-600',    bg:'bg-red-50',    border:'border-red-200',    action:'申告の手順をガイドで確認する'       },
   gray:            { emoji:'🔍', label:'グレーゾーン',       title:'専門家への相談をおすすめします',         desc:'ご状況が複雑なため、税務署または税理士への相談をおすすめします。本アプリの情報はあくまで参考情報です。',                                  color:'text-gray-600',   bg:'bg-gray-50',   border:'border-gray-200',   action:'税務署・税理士に相談する'           },
 }
 
-// ── アイコン ─────────────────────────────────────────────
-const NavIcons = {
-  logout:   (<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>),
-  home:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>),
-  diagnose: (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>),
-  book:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>),
-  check:    (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
-  chat:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>),
-  record:   (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>),
-  back:     (<svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>),
-}
 
-// ── サイドバー ───────────────────────────────────────────
-function Sidebar({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const items = [
-    { id:'home',     label:'ホーム',        icon:NavIcons.home     },
-    { id:'diagnose', label:'確定申告診断',   icon:NavIcons.diagnose },
-    { id:'guide',    label:'ケース別ガイド', icon:NavIcons.book     },
-    { id:'check',    label:'書類チェック',   icon:NavIcons.check    },
-    { id:'chat',     label:'AIチャット',     icon:NavIcons.chat     },
-    { id:'record',   label:'収入・経費記録', icon:NavIcons.record   },
-  ]
-  return (
-    <div className="w-56 flex-shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col p-4">
-      <div className="flex items-center gap-3 px-2 mb-8 mt-2">
-        <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-white">{NavIcons.diagnose}</div>
-        <div>
-          <p className="text-white text-sm font-bold leading-none">確定申告ナビ</p>
-          <p className="text-sky-400 text-xs">学生向け PWA</p>
-        </div>
-      </div>
-      <nav className="flex flex-col gap-1 flex-1">
-        <p className="text-slate-500 text-xs font-semibold px-3 mb-2 tracking-wider">MENU</p>
-        {items.map((item) => (
-          <button key={item.id} onClick={() => onNavigate(item.id)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-              item.id === 'diagnose'
-                ? 'bg-sky-500/10 text-sky-400 font-semibold border-l-2 border-sky-500'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border-l-2 border-transparent'
-            }`}>
-            {item.icon}{item.label}
-          </button>
-        ))}
-      </nav>
-      <div className="border-t border-slate-700 pt-4 flex items-center gap-3 px-2">
-        <div className="w-8 h-8 bg-gradient-to-br from-sky-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold">{auth.currentUser?.email?.[0].toUpperCase()}</span>
-        </div>
-        <p className="text-slate-400 text-xs flex-1 truncate">{auth.currentUser?.email}</p>
-        <button onClick={() => auth.signOut()} className="text-slate-500 hover:text-slate-300 transition-colors">{NavIcons.logout}</button>
-      </div>
-    </div>
-  )
-}
 
-// ── ボトムナビ ───────────────────────────────────────────
-function BottomNav({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const items = [
-    { id:'home',     label:'ホーム',     icon:NavIcons.home     },
-    { id:'diagnose', label:'診断',       icon:NavIcons.diagnose },
-    { id:'record',   label:'記録',       icon:NavIcons.record   },
-    { id:'guide',    label:'ガイド',     icon:NavIcons.book     },
-    { id:'chat',     label:'AIチャット', icon:NavIcons.chat     },
-  ]
-  return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50">
-      {items.map((item) => (
-        <button key={item.id} onClick={() => onNavigate(item.id)}
-          className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs transition-colors ${
-            item.id === 'diagnose' ? 'text-sky-500' : 'text-gray-400'
-          }`}>
-          {item.icon}
-          <span>{item.label}</span>
-          {item.id === 'diagnose' && <span className="w-1 h-1 rounded-full bg-sky-500" />}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ── 共通UIパーツ ─────────────────────────────────────────
 function SelectCard({ label, sub, selected, onClick, emoji }: {
@@ -299,12 +232,12 @@ function Step5({ answers, onChange, onNext }: {
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <InfoBox text="2026年分から所得税の非課税ラインが178万円に引き上げられました（年収200万円以下の場合）。源泉徴収票の「支払金額」欄の合計を確認してください。住民税は110万円を超えると課税されます。" />
+      <InfoBox text={`2026年分から所得税の非課税ラインが${WALL_LABELS.incomeTax}に引き上げられました（年収${formatMan(SPECIAL_RULE_SALARY_CAP)}以下の場合）。源泉徴収票の「支払金額」欄の合計を確認してください。住民税は${WALL_LABELS.residentTax}を超えると課税されます。`} />
       <div className="flex flex-col gap-2">
         {[
-          { value:'under160', label:'160万円以下',            sub:'所得税は非課税（住民税は110万円超から課税）', emoji:'🟢' },
-          { value:'160to178', label:'160万円超〜178万円以下', sub:'年収200万円以下なら所得税は非課税',           emoji:'🟡' },
-          { value:'over178',  label:'178万円超',              sub:'所得税が発生する可能性あり',                  emoji:'🔴' },
+          { value:'under160', label:`${formatMan(SALARY_RANGE_LOWER)}以下`,            sub:`所得税は非課税（住民税は${WALL_LABELS.residentTax}超から課税）`, emoji:'🟢' },
+          { value:'160to178', label:`${formatMan(SALARY_RANGE_LOWER)}超〜${WALL_LABELS.incomeTax}以下`, sub:`年収${formatMan(SPECIAL_RULE_SALARY_CAP)}以下なら所得税は非課税`,           emoji:'🟡' },
+          { value:'over178',  label:`${WALL_LABELS.incomeTax}超`,              sub:'所得税が発生する可能性あり',                  emoji:'🔴' },
         ].map((o) => (
           <SelectCard key={o.value} label={o.label} sub={o.sub} emoji={o.emoji}
             selected={answers.salaryRange === o.value}
@@ -321,11 +254,11 @@ function Step6({ answers, onChange, onNext }: {
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <InfoBox text="業務委託・フリマの「所得」は、収入から経費（交通費・材料費等）を差し引いた金額です。年末調整を受けた給与所得者は、この所得が20万円を超えると確定申告が必要です。※給与収入がない場合は20万円ルールの対象外で、所得の合計が基礎控除の範囲内かどうかで判断します。" />
+      <InfoBox text={`業務委託・フリマの「所得」は、収入から経費（交通費・材料費等）を差し引いた金額です。年末調整を受けた給与所得者は、この所得が${WALL_LABELS.sideIncome}を超えると確定申告が必要です。※給与収入がない場合は${WALL_LABELS.sideIncome}ルールの対象外で、所得の合計が基礎控除の範囲内かどうかで判断します。`} />
       <div className="flex flex-col gap-2">
         {[
-          { value:'under20', label:'20万円以下', sub:'経費を差し引いた所得が20万円以下', emoji:'🟢' },
-          { value:'over20',  label:'20万円超',   sub:'経費を差し引いた所得が20万円超',   emoji:'🔴' },
+          { value:'under20', label:`${WALL_LABELS.sideIncome}以下`, sub:`経費を差し引いた所得が${WALL_LABELS.sideIncome}以下`, emoji:'🟢' },
+          { value:'over20',  label:`${WALL_LABELS.sideIncome}超`,   sub:`経費を差し引いた所得が${WALL_LABELS.sideIncome}超`,   emoji:'🔴' },
           { value:'none',    label:'収入はない', sub:'副業・フリマ収入は0円',             emoji:'—'  },
         ].map((o) => (
           <SelectCard key={o.value} label={o.label} sub={o.sub} emoji={o.emoji}
@@ -658,7 +591,7 @@ function DiagnosisResult({ answers, onRestart, onNavigate }: {
         {[
           { label:'在籍状況',   value: answers.enrollment === 'day' ? '昼間部' : answers.enrollment === 'evening' ? '夜間・通信制' : '休学中' },
           { label:'収入の種類', value: answers.incomeTypes.join('・') || 'なし' },
-          { label:'給与収入',   value: answers.salaryRange === 'under160' ? '160万円以下' : answers.salaryRange === '160to178' ? '160〜178万円' : '178万円超' },
+          { label:'給与収入',   value: answers.salaryRange === 'under160' ? `${formatMan(SALARY_RANGE_LOWER)}以下` : answers.salaryRange === '160to178' ? `160〜${WALL_LABELS.incomeTax}` : `${WALL_LABELS.incomeTax}超` },
           { label:'年末調整',   value: answers.yearEndAdj === 'all' ? '全社済み' : answers.yearEndAdj === 'partial' ? '一部のみ' : '未実施' },
           { label:'控除の有無', value: answers.deductions.includes('none') ? 'なし' : answers.deductions.length > 0 ? `${answers.deductions.length}種類あり` : '未回答' },
         ].map((row) => (
@@ -700,10 +633,23 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
   const update = (key: keyof Answers, value: string | string[]) =>
     setAnswers((prev) => ({ ...prev, [key]: value }))
 
+  useEffect(() => {
+    trackEvent(AnalyticsEvents.diagnosisStart)
+  }, [])
+
   const finishDiagnosis = async (currentAnswers: Answers) => {
     setSaving(true)
     const resultType = calcResult(currentAnswers)
-    await saveResult(resultType, currentAnswers)
+    try {
+      await saveResult(resultType, currentAnswers)
+    } catch (error) {
+      console.error('診断結果の保存に失敗しました', error)
+    }
+    // 回答内容そのものは送らず、結果の分類のみ計測する
+    trackEvent(AnalyticsEvents.diagnosisComplete, {
+      result_type: resultType,
+      income_types: currentAnswers.incomeTypes.join('|') || 'none',
+    })
     setSaving(false)
     setDone(true)
   }
@@ -736,7 +682,8 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
 
   const stepProps = { answers, onChange: update, onNext: next }
 
-  const StepContent = () => (
+  // レンダー中にコンポーネントを定義すると毎回別物として扱われ、入力内容が失われる
+  const renderStep = () => (
     <>
       {step === 1 && <Step1 {...stepProps} />}
       {step === 2 && <Step2 {...stepProps} />}
@@ -758,7 +705,7 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
           <div className="flex items-center gap-3">
             <button onClick={back}
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400 flex-shrink-0">
-              {NavIcons.back}
+              {Icons.back}
             </button>
             <div>
               <h1 className="text-white text-lg font-bold">{done ? '診断結果' : STEP_TITLES[step]}</h1>
@@ -788,21 +735,21 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
           ) : done ? (
             <DiagnosisResult answers={answers} onRestart={restart} onNavigate={onNavigate} />
           ) : (
-            <StepContent />
+            renderStep()
           )}
         </div>
 
-        <BottomNav onNavigate={onNavigate} />
+        <BottomNav active="diagnose" onNavigate={onNavigate} />
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
       <div className="hidden md:flex h-screen bg-gray-100">
-        <Sidebar onNavigate={onNavigate} />
+        <Sidebar active="diagnose" onNavigate={onNavigate} />
         <div className="flex-1 flex flex-col overflow-auto">
           <div className="flex items-center gap-4 px-8 py-5 bg-slate-800 border-b border-slate-700">
             <button onClick={back}
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400 flex-shrink-0">
-              {NavIcons.back}
+              {Icons.back}
             </button>
             <div>
               <h2 className="text-white text-xl font-bold">{done ? '診断結果' : STEP_TITLES[step]}</h2>
@@ -835,7 +782,7 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
             ) : (
               <div className="max-w-5xl grid grid-cols-5 gap-8">
                 <div className="col-span-3">
-                  <StepContent />
+                  {renderStep()}
                 </div>
                 <div className="col-span-2 flex flex-col gap-4">
                   <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
@@ -874,9 +821,9 @@ export default function DiagnosisScreen({ onNavigate }: { onNavigate: (screen: s
                     <p className="text-xs font-semibold text-gray-400 tracking-wider mb-4">2026年の主な変更点</p>
                     <div className="flex flex-col gap-3">
                       {[
-                        { label:'所得税の壁', value:'178万円', note:'2026年分〜（年収200万円以下）', color:'text-sky-500'    },
-                        { label:'住民税の壁', value:'110万円', note:'110万円超から課税',              color:'text-purple-500' },
-                        { label:'社保の扶養', value:'130万円', note:'変更なし',                        color:'text-amber-500'  },
+                        { label:'所得税の壁', value:`${WALL_LABELS.incomeTax}`, note:`2026年分〜（年収${formatMan(SPECIAL_RULE_SALARY_CAP)}以下）`, color:'text-sky-500'    },
+                        { label:'住民税の壁', value:`${WALL_LABELS.residentTax}`, note:`${WALL_LABELS.residentTax}超から課税`,              color:'text-purple-500' },
+                        { label:'社保の扶養', value:`${WALL_LABELS.dependentInsurance}`, note:'変更なし',                        color:'text-amber-500'  },
                       ].map((w) => (
                         <div key={w.label} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                           <div>
