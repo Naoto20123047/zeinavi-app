@@ -1,17 +1,9 @@
-import { auth } from '../../lib/firebase'
 import { useChecklist } from '../../hooks/useChecklist'
+import Sidebar from '../../components/Sidebar'
+import BottomNav from '../../components/BottomNav'
+import { Icons } from '../../components/Icons'
+import { trackEvent, AnalyticsEvents } from '../../lib/analytics'
 
-// ── アイコン ─────────────────────────────────────────────
-const NavIcons = {
-  logout:   (<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>),
-  home:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>),
-  diagnose: (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>),
-  book:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>),
-  check:    (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
-  chat:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>),
-  record:   (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>),
-  back:     (<svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>),
-}
 
 // ── チェックリストデータ ─────────────────────────────────
 interface CheckItem {
@@ -65,73 +57,7 @@ const CATEGORIES: CheckCategory[] = [
   },
 ]
 
-// ── サイドバー ───────────────────────────────────────────
-function Sidebar({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const items = [
-    { id:'home',     label:'ホーム',        icon:NavIcons.home     },
-    { id:'diagnose', label:'確定申告診断',   icon:NavIcons.diagnose },
-    { id:'guide',    label:'ケース別ガイド', icon:NavIcons.book     },
-    { id:'check',    label:'書類チェック',   icon:NavIcons.check    },
-    { id:'chat',     label:'AIチャット',     icon:NavIcons.chat     },
-    { id:'record',   label:'収入・経費記録', icon:NavIcons.record   },
-  ]
-  return (
-    <div className="w-56 flex-shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col p-4">
-      <div className="flex items-center gap-3 px-2 mb-8 mt-2">
-        <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-white">{NavIcons.diagnose}</div>
-        <div>
-          <p className="text-white text-sm font-bold leading-none">確定申告ナビ</p>
-          <p className="text-sky-400 text-xs">学生向け PWA</p>
-        </div>
-      </div>
-      <nav className="flex flex-col gap-1 flex-1">
-        <p className="text-slate-500 text-xs font-semibold px-3 mb-2 tracking-wider">MENU</p>
-        {items.map((item) => (
-          <button key={item.id} onClick={() => onNavigate(item.id)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-              item.id === 'check'
-                ? 'bg-sky-500/10 text-sky-400 font-semibold border-l-2 border-sky-500'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border-l-2 border-transparent'
-            }`}>
-            {item.icon}{item.label}
-          </button>
-        ))}
-      </nav>
-      <div className="border-t border-slate-700 pt-4 flex items-center gap-3 px-2">
-        <div className="w-8 h-8 bg-gradient-to-br from-sky-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold">{auth.currentUser?.email?.[0].toUpperCase()}</span>
-        </div>
-        <p className="text-slate-400 text-xs flex-1 truncate">{auth.currentUser?.email}</p>
-        <button onClick={() => auth.signOut()} className="text-slate-500 hover:text-slate-300 transition-colors">{NavIcons.logout}</button>
-      </div>
-    </div>
-  )
-}
 
-// ── ボトムナビ ───────────────────────────────────────────
-function BottomNav({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const items = [
-    { id:'home',     label:'ホーム',     icon:NavIcons.home     },
-    { id:'diagnose', label:'診断',       icon:NavIcons.diagnose },
-    { id:'record',   label:'記録',       icon:NavIcons.record   },
-    { id:'guide',    label:'ガイド',     icon:NavIcons.book     },
-    { id:'chat',     label:'AIチャット', icon:NavIcons.chat     },
-  ]
-  return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50">
-      {items.map((item) => (
-        <button key={item.id} onClick={() => onNavigate(item.id)}
-          className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs transition-colors ${
-            item.id === 'check' ? 'text-sky-500' : 'text-gray-400'
-          }`}>
-          {item.icon}
-          <span>{item.label}</span>
-          {item.id === 'check' && <span className="w-1 h-1 rounded-full bg-sky-500" />}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ── 進捗バー ─────────────────────────────────────────────
 function ProgressBar({ checked, total, required, requiredDone }: {
@@ -197,7 +123,20 @@ function CheckItemRow({ item, checked, onToggle }: {
 // ── メインコンポーネント ─────────────────────────────────
 export default function ChecklistScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
   const allItems = CATEGORIES.flatMap((c) => c.items)
-  const { checkedIds, loading, toggle, reset } = useChecklist()
+  const { checkedIds, loading, toggle: toggleItem, reset: resetItems } = useChecklist()
+
+  const toggle = (id: string) => {
+    trackEvent(AnalyticsEvents.checklistToggled, {
+      item_id: id,
+      checked: !checkedIds.has(id),
+    })
+    return toggleItem(id)
+  }
+
+  const reset = () => {
+    trackEvent(AnalyticsEvents.checklistReset)
+    return resetItems()
+  }
 
   const checkedCount      = checkedIds.size
   const totalCount        = allItems.length
@@ -215,7 +154,7 @@ export default function ChecklistScreen({ onNavigate }: { onNavigate: (screen: s
             <div className="flex items-center gap-3">
               <button onClick={() => onNavigate('home')}
                 className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400 flex-shrink-0">
-                {NavIcons.back}
+                {Icons.back}
               </button>
               <div>
                 <h1 className="text-white text-lg font-bold">書類チェックリスト</h1>
@@ -272,12 +211,12 @@ export default function ChecklistScreen({ onNavigate }: { onNavigate: (screen: s
           )}
         </div>
 
-        <BottomNav onNavigate={onNavigate} />
+        <BottomNav active="check" onNavigate={onNavigate} />
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
       <div className="hidden md:flex h-screen bg-gray-100">
-        <Sidebar onNavigate={onNavigate} />
+        <Sidebar active="check" onNavigate={onNavigate} />
         <div className="flex-1 flex flex-col overflow-auto">
 
           {/* ページヘッダー */}

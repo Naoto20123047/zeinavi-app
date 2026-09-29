@@ -1,19 +1,15 @@
 import { useState } from 'react'
-import { auth } from '../../lib/firebase'
+import Sidebar from '../../components/Sidebar'
+import BottomNav from '../../components/BottomNav'
+import { Icons } from '../../components/Icons'
+import {
+  WALL_LABELS,
+  formatMan,
+  FILING_DEADLINE_LABEL,
+  SPECIAL_RULE_SALARY_CAP,
+} from '../../config/taxConfig'
+import { trackEvent, AnalyticsEvents } from '../../lib/analytics'
 
-// ── アイコン ─────────────────────────────────────────────
-const NavIcons = {
-  logout:   (<svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>),
-  home:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>),
-  diagnose: (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>),
-  book:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>),
-  check:    (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
-  chat:     (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>),
-  record:   (<svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>),
-  back:     (<svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>),
-  arrow:    (<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>),
-  chevron:  (<svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>),
-}
 
 // ── ガイドデータ ─────────────────────────────────────────
 interface GuideStep {
@@ -45,13 +41,13 @@ const GUIDES: Guide[] = [
     headerBg: 'bg-teal-50', headerBorder: 'border-teal-200',
     steps: [
       { title: '源泉徴収票を集める',         body: '年末または退職時にバイト先からもらいます。掛け持ちの場合はすべての勤務先分を集めてください。紛失した場合は会社に再発行を依頼できます。' },
-      { title: '確定申告が必要か確認する',   body: '以下のいずれかに当てはまる場合は申告が必要です。①複数のバイト先がある ②年収が178万円を超える ③年末調整が未実施・途中退職。ただし住民税は110万円超から課税されます。' },
+      { title: '確定申告が必要か確認する',   body: `以下のいずれかに当てはまる場合は申告が必要です。①複数のバイト先がある ②年収が${WALL_LABELS.incomeTax}を超える ③年末調整が未実施・途中退職。ただし住民税は${WALL_LABELS.residentTax}超から課税されます。` },
       { title: 'e-Taxで申告書を作成する',    body: '国税庁のe-Taxまたは確定申告書等作成コーナーで作成します。源泉徴収票の「支払金額」と「源泉徴収税額」を入力します。マイナンバーカードがあればスマホで完結します。' },
-      { title: '申告・納税または還付申請',   body: '2月16日〜3月15日に申告します。還付申告の場合は1月1日から5年間いつでも申告できます。還付金は申告後3週間（e-Tax）〜2か月（書面）で指定口座に振り込まれます。' },
+      { title: '申告・納税または還付申請',   body: `2月16日〜${FILING_DEADLINE_LABEL}に申告します。還付申告の場合は1月1日から5年間いつでも申告できます。還付金は申告後3週間（e-Tax）〜2か月（書面）で指定口座に振り込まれます。` },
     ],
     notes: [
-      '年収178万円以下（年収200万円以下の場合）でも、年末調整が未実施なら還付申告ができます。',
-      '住民税は110万円を超えると課税されます。所得税の壁とは異なるので注意してください。',
+      `年収${WALL_LABELS.incomeTax}以下（年収${formatMan(SPECIAL_RULE_SALARY_CAP)}以下の場合）でも、年末調整が未実施なら還付申告ができます。`,
+      `住民税は${WALL_LABELS.residentTax}を超えると課税されます。所得税の壁とは異なるので注意してください。`,
       '掛け持ちバイトの場合、メインのバイト先以外は「乙欄」で源泉徴収されるため税額が高くなっています。確定申告で精算できます。',
     ],
     docs: ['源泉徴収票（全勤務先分）', 'マイナンバーカード（または通知カード＋身分証）', '銀行口座情報（還付金の振込先）'],
@@ -64,14 +60,14 @@ const GUIDES: Guide[] = [
     headerBg: 'bg-purple-50', headerBorder: 'border-purple-200',
     steps: [
       { title: '収入と経費を整理する',       body: '報酬の合計額を集計し、業務に関わった経費（交通費・通信費・機材費・書籍代等）を整理します。経費の証明として領収書・レシートを必ず保管してください。' },
-      { title: '所得を計算する',             body: '所得 ＝ 収入 − 経費。年間の所得が20万円を超えると確定申告が必要です。給与収入がある場合は給与と合算して判断します。' },
+      { title: '所得を計算する',             body: `所得 ＝ 収入 − 経費。年間の所得が${WALL_LABELS.sideIncome}を超えると確定申告が必要です。給与収入がある場合は給与と合算して判断します。` },
       { title: '帳簿を作成する',             body: '事業所得として申告する場合、収支を記録した帳簿の作成が必要です。青色申告にすると最大65万円の特別控除が受けられます（事前に青色申告承認申請書の提出が必要）。' },
       { title: '確定申告書を作成・提出する', body: '事業所得または雑所得として申告します。e-Taxで作成するのが便利です。経費の内訳も入力します。' },
     ],
     notes: [
-      '業務委託の場合、経費を差し引いた「所得」が20万円以下なら申告不要（給与収入がない場合）です。',
+      `業務委託の場合、経費を差し引いた「所得」が${WALL_LABELS.sideIncome}以下なら申告不要（給与収入がない場合）です。`,
       '継続して事業を行っている場合は「事業所得」、単発の場合は「雑所得」として申告します。',
-      '青色申告は申告前年の3月15日までに申請が必要です。初年度は開業から2か月以内に申請できます。',
+      `青色申告は申告前年の${FILING_DEADLINE_LABEL}までに申請が必要です。初年度は開業から2か月以内に申請できます。`,
     ],
     docs: ['支払調書（取引先から受け取る）', '経費の領収書・レシート', 'マイナンバーカード', '銀行口座情報'],
   },
@@ -84,7 +80,7 @@ const GUIDES: Guide[] = [
     steps: [
       { title: '課税対象か確認する',         body: '自分で使っていた不用品の売却は原則非課税です。仕入れて転売・継続的に販売している場合は課税対象となります。' },
       { title: '利益を計算する',             body: '所得 ＝ 売上 − 仕入れ値 − 送料 − 手数料。メルカリ・ヤフオクの取引履歴からデータをエクスポートして集計します。' },
-      { title: '申告が必要か判断する',       body: '副業の所得が年間20万円を超える場合は確定申告が必要です。給与収入がある場合は「雑所得」として申告します。' },
+      { title: '申告が必要か判断する',       body: `副業の所得が年間${WALL_LABELS.sideIncome}を超える場合は確定申告が必要です。給与収入がある場合は「雑所得」として申告します。` },
       { title: '確定申告書を作成・提出する', body: '確定申告書の「雑所得」欄に収入・経費を記入します。給与収入がある場合は合算して申告します。' },
     ],
     notes: [
@@ -134,73 +130,7 @@ const GUIDES: Guide[] = [
   },
 ]
 
-// ── サイドバー ───────────────────────────────────────────
-function Sidebar({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const items = [
-    { id:'home',     label:'ホーム',        icon:NavIcons.home     },
-    { id:'diagnose', label:'確定申告診断',   icon:NavIcons.diagnose },
-    { id:'guide',    label:'ケース別ガイド', icon:NavIcons.book     },
-    { id:'check',    label:'書類チェック',   icon:NavIcons.check    },
-    { id:'chat',     label:'AIチャット',     icon:NavIcons.chat     },
-    { id:'record',   label:'収入・経費記録', icon:NavIcons.record   },
-  ]
-  return (
-    <div className="w-56 flex-shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col p-4">
-      <div className="flex items-center gap-3 px-2 mb-8 mt-2">
-        <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-white">{NavIcons.diagnose}</div>
-        <div>
-          <p className="text-white text-sm font-bold leading-none">確定申告ナビ</p>
-          <p className="text-sky-400 text-xs">学生向け PWA</p>
-        </div>
-      </div>
-      <nav className="flex flex-col gap-1 flex-1">
-        <p className="text-slate-500 text-xs font-semibold px-3 mb-2 tracking-wider">MENU</p>
-        {items.map((item) => (
-          <button key={item.id} onClick={() => onNavigate(item.id)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-              item.id === 'guide'
-                ? 'bg-sky-500/10 text-sky-400 font-semibold border-l-2 border-sky-500'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border-l-2 border-transparent'
-            }`}>
-            {item.icon}{item.label}
-          </button>
-        ))}
-      </nav>
-      <div className="border-t border-slate-700 pt-4 flex items-center gap-3 px-2">
-        <div className="w-8 h-8 bg-gradient-to-br from-sky-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-xs font-bold">{auth.currentUser?.email?.[0].toUpperCase()}</span>
-        </div>
-        <p className="text-slate-400 text-xs flex-1 truncate">{auth.currentUser?.email}</p>
-        <button onClick={() => auth.signOut()} className="text-slate-500 hover:text-slate-300 transition-colors">{NavIcons.logout}</button>
-      </div>
-    </div>
-  )
-}
 
-// ── ボトムナビ ───────────────────────────────────────────
-function BottomNav({ onNavigate }: { onNavigate: (s: string) => void }) {
-  const items = [
-    { id:'home',     label:'ホーム',     icon:NavIcons.home     },
-    { id:'diagnose', label:'診断',       icon:NavIcons.diagnose },
-    { id:'record',   label:'記録',       icon:NavIcons.record   },
-    { id:'guide',    label:'ガイド',     icon:NavIcons.book     },
-    { id:'chat',     label:'AIチャット', icon:NavIcons.chat     },
-  ]
-  return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-50">
-      {items.map((item) => (
-        <button key={item.id} onClick={() => onNavigate(item.id)}
-          className={`flex-1 flex flex-col items-center gap-1 py-3 text-xs transition-colors ${
-            item.id === 'guide' ? 'text-sky-500' : 'text-gray-400'
-          }`}>
-          {item.icon}
-          <span>{item.label}</span>
-          {item.id === 'guide' && <span className="w-1 h-1 rounded-full bg-sky-500" />}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ── ガイド一覧 ───────────────────────────────────────────
 function GuideList({ onSelect, onNavigate }: {
@@ -215,7 +145,7 @@ function GuideList({ onSelect, onNavigate }: {
           <div className="flex items-center gap-3">
             <button onClick={() => onNavigate('home')}
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400 flex-shrink-0">
-              {NavIcons.back}
+              {Icons.back}
             </button>
             <div>
               <h1 className="text-white text-lg font-bold">ケース別ガイド</h1>
@@ -239,17 +169,17 @@ function GuideList({ onSelect, onNavigate }: {
                   </div>
                   <p className="text-gray-500 text-xs">{g.desc}</p>
                 </div>
-                <span className="text-gray-400 flex-shrink-0">{NavIcons.arrow}</span>
+                <span className="text-gray-400 flex-shrink-0">{Icons.arrow}</span>
               </button>
             ))}
           </div>
         </div>
-        <BottomNav onNavigate={onNavigate} />
+        <BottomNav active="guide" onNavigate={onNavigate} />
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
       <div className="hidden md:flex h-screen bg-gray-100">
-        <Sidebar onNavigate={onNavigate} />
+        <Sidebar active="guide" onNavigate={onNavigate} />
         <div className="flex-1 flex flex-col overflow-auto">
           <div className="flex items-center gap-4 px-8 py-5 bg-slate-800 border-b border-slate-700">
             <div>
@@ -273,7 +203,7 @@ function GuideList({ onSelect, onNavigate }: {
                     </div>
                     <p className="text-gray-500 text-xs leading-relaxed">{g.desc}</p>
                   </div>
-                  <span className="text-gray-400 flex-shrink-0">{NavIcons.arrow}</span>
+                  <span className="text-gray-400 flex-shrink-0">{Icons.arrow}</span>
                 </button>
               ))}
             </div>
@@ -307,7 +237,7 @@ function GuideDetail({ guide, onBack, onNavigate }: {
           <div className="flex items-center gap-3">
             <button onClick={onBack}
               className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400 flex-shrink-0">
-              {NavIcons.back}
+              {Icons.back}
             </button>
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <span className="text-2xl flex-shrink-0">{guide.emoji}</span>
@@ -335,7 +265,7 @@ function GuideDetail({ guide, onBack, onNavigate }: {
                   </div>
                   <p className="text-gray-800 text-sm font-semibold flex-1">{step.title}</p>
                   <span className={`text-gray-400 transition-transform ${openStep === i ? 'rotate-180' : ''}`}>
-                    {NavIcons.chevron}
+                    {Icons.chevron}
                   </span>
                 </button>
                 {openStep === i && (
@@ -389,19 +319,19 @@ function GuideDetail({ guide, onBack, onNavigate }: {
             ※ 本アプリの情報は参考情報です。<br />最終的な判断は税務署または税理士にご相談ください。
           </p>
         </div>
-        <BottomNav onNavigate={onNavigate} />
+        <BottomNav active="guide" onNavigate={onNavigate} />
       </div>
 
       {/* ══ デスクトップ表示 ══ */}
       <div className="hidden md:flex h-screen bg-gray-100">
-        <Sidebar onNavigate={onNavigate} />
+        <Sidebar active="guide" onNavigate={onNavigate} />
         <div className="flex-1 flex flex-col overflow-auto">
 
           {/* ヘッダー */}
           <div className="bg-slate-800 border-b border-slate-700 px-8 py-6 flex-shrink-0">
             <button onClick={onBack}
               className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-sm mb-4 transition-colors">
-              {NavIcons.back}
+              {Icons.back}
               <span>ガイド一覧に戻る</span>
             </button>
             <div className="flex items-center gap-4">
@@ -436,7 +366,7 @@ function GuideDetail({ guide, onBack, onNavigate }: {
                           </div>
                           <p className="text-gray-800 text-sm font-semibold flex-1">{step.title}</p>
                           <span className={`text-gray-400 transition-transform ${openStep === i ? 'rotate-180' : ''}`}>
-                            {NavIcons.chevron}
+                            {Icons.chevron}
                           </span>
                         </button>
                         {openStep === i && (
@@ -527,7 +457,10 @@ export default function GuideScreen({ onNavigate }: { onNavigate: (screen: strin
 
   return (
     <GuideList
-      onSelect={setSelectedId}
+      onSelect={(id) => {
+        trackEvent(AnalyticsEvents.guideCaseViewed, { case_id: id })
+        setSelectedId(id)
+      }}
       onNavigate={onNavigate}
     />
   )

@@ -48,7 +48,11 @@ export function useChecklist() {
   // チェックの切り替え
   const toggle = async (id: string) => {
     const next = new Set(checkedIds)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
     setCheckedIds(next)
     await save(next)
   }

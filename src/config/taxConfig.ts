@@ -75,7 +75,7 @@ export function calcSalaryDeduction(salaryIncome: number): number {
 export function calcIncomeTax(taxableIncome: number): number {
   const taxable = Math.floor(taxableIncome / 1000) * 1000
 
-  let baseTax = 0
+  let baseTax: number
   if (taxable <= 1950000)       baseTax = taxable * 0.05
   else if (taxable <= 3300000)  baseTax = taxable * 0.10 - 97500
   else if (taxable <= 6950000)  baseTax = taxable * 0.20 - 427500
@@ -96,3 +96,39 @@ export function calcLifeInsuranceDeduction(paid: number): number {
   if (paid <= 80000)  return Math.floor(paid / 4 + 20000)
   return 40000
 }
+
+// ═══════════════════════════════════════════════════════
+//  表示用フォーマッタ／ラベル
+//  画面側に「178万円」などを直書きせず、必ずここを経由させる
+// ═══════════════════════════════════════════════════════
+
+/** 1780000 → "178万円" */
+export function formatMan(yen: number): string {
+  const man = yen / 10000
+  return `${Number.isInteger(man) ? man : man.toFixed(1)}万円`
+}
+
+export const WALL_LABELS = {
+  incomeTax:              formatMan(INCOME_WALLS.incomeTax),              // 178万円
+  residentTax:            formatMan(INCOME_WALLS.residentTax),            // 110万円
+  dependentInsurance:     formatMan(INCOME_WALLS.dependentInsurance),     // 130万円
+  dependentInsurance1922: formatMan(INCOME_WALLS.dependentInsurance1922), // 150万円
+  sideIncome:             formatMan(REPORT_THRESHOLDS.sideIncome),        // 20万円
+} as const
+
+/** 給与収入が「所得税非課税」と判定される上限（特例の適用条件） */
+export const SPECIAL_RULE_SALARY_CAP = 2000000
+
+/** ホーム画面の収入プログレスバーの上限 */
+export const INCOME_BAR_LIMIT = INCOME_WALLS.dependentInsurance
+
+export const FILING_DEADLINE_LABEL = '3月15日'
+
+/** AIチャットの1日あたり利用上限。Firestore ルール側の上限とも揃えること */
+export const CHAT_DAILY_LIMIT = 10
+
+/** 診断画面の給与収入レンジの区切り（旧「103万円の壁」相当の目安） */
+export const SALARY_RANGE_LOWER = 1600000
+
+/** 例: "2027年3月15日" */
+export const FILING_DEADLINE_FULL_LABEL = `${TAX_YEAR + 1}年${FILING_DEADLINE_LABEL}`

@@ -1,18 +1,46 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
+import { getAuth, connectAuthEmulator } from 'firebase/auth'
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore'
+import {
+  firebaseEnv,
+  recaptchaSiteKey,
+  appCheckDebugToken,
+  useEmulator,
+} from './env'
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDYlUovU9-wN4JskeT3_eTS-QZzRf3U9BA",
-  authDomain: "zeminavi-app-21451.firebaseapp.com",
-  projectId: "zeminavi-app-21451",
-  storageBucket: "zeminavi-app-21451.firebasestorage.app",
-  messagingSenderId: "815486468329",
-  appId: "1:815486468329:web: a10d42484e98b9cb8f7078",
-  measurementId: "G-1G0T42NWR6"
-};
+const app = initializeApp({
+  apiKey:            firebaseEnv.apiKey,
+  authDomain:        firebaseEnv.authDomain,
+  projectId:         firebaseEnv.projectId,
+  storageBucket:     firebaseEnv.storageBucket,
+  messagingSenderId: firebaseEnv.messagingSenderId,
+  appId:             firebaseEnv.appId,
+  measurementId:     firebaseEnv.measurementId,
+})
 
-const app = initializeApp(firebaseConfig);
+// App Check は他のサービスを使う前に初期化する必要がある
+if (appCheckDebugToken && import.meta.env.DEV) {
+  ;(globalThis as { FIREBASE_APPCHECK_DEBUG_TOKEN?: string }).FIREBASE_APPCHECK_DEBUG_TOKEN =
+    appCheckDebugToken
+}
 
+if (recaptchaSiteKey) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaEnterpriseProvider(recaptchaSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  })
+} else if (import.meta.env.PROD) {
+  console.warn(
+    'VITE_RECAPTCHA_SITE_KEY が未設定です。App Check が有効な環境ではAIチャットが利用できません。'
+  )
+}
+
+export const firebaseApp = app
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+export const db   = getFirestore(app)
+
+if (import.meta.env.DEV && useEmulator) {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true })
+  connectFirestoreEmulator(db, '127.0.0.1', 8080)
+}
