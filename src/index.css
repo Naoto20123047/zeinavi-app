@@ -1,1 +1,196 @@
 @import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════
+   配色（D案）：紺と青の2色＋わずかに暖かみのある無彩色
+   - 新しい画面は navy / brand / paper / sand / ink / muted / warn を使う
+   - 既存画面の slate・sky・gray などの色も同じ値に置き換え、全体の色をそろえる
+   - 注意（琥珀色）は「申告が必要」「扶養から外れる」など本当の注意だけに使う
+   ═══════════════════════════════════════════════════════ */
+@theme {
+  --font-sans: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-display: "Zen Kaku Gothic New", "Noto Sans JP", sans-serif;
+
+  /* 紺 */
+  --color-navy-950: #121C30;
+  --color-navy-900: #1E2C47;
+  --color-navy-800: #2C3D5E;
+  --color-navy-700: #334466;
+  --color-navy-600: #3A4B6B;
+
+  /* 青（ボタン・リンク・選択中） */
+  --color-brand-50:  #EAF2F8;
+  --color-brand-100: #DCEAF6;
+  --color-brand-200: #CFE3F3;
+  --color-brand-300: #A9D4F5;
+  --color-brand-400: #4AA8E8;
+  --color-brand-600: #1D6FB8;
+  --color-brand-700: #15558F;
+
+  /* 背景と無彩色（わずかに黄み） */
+  --color-paper:    #F7F5F0;
+  --color-sand-50:  #FAF8F4;
+  --color-sand-100: #F3EFE6;
+  --color-sand-200: #E9E4DA;
+  --color-sand-300: #E6E1D8;
+  --color-sand-400: #D9D3C7;
+  --color-sand-500: #ADA697;
+  --color-ink:      #1A1F2B;
+  --color-muted:    #6B665C;
+
+  /* 注意 */
+  --color-warn-50:  #FBE6CC;
+  --color-warn-700: #8A3A00;
+
+  /* ── 既存画面の色を置き換え ── */
+  --color-slate-300: #E6E1D8;
+  --color-slate-400: #CFC9BB;
+  --color-slate-500: #A8A193;
+  --color-slate-600: #3A4B6B;
+  --color-slate-700: #2C3D5E;
+  --color-slate-800: #1E2C47;
+  --color-slate-900: #121C30;
+
+  --color-gray-50:  #FAF8F4;
+  --color-gray-100: #F7F5F0;
+  --color-gray-200: #E6E1D8;
+  --color-gray-300: #D9D3C7;
+  --color-gray-400: #8A8478;
+  --color-gray-500: #6B665C;
+  --color-gray-600: #57534B;
+  --color-gray-700: #3A352C;
+  --color-gray-800: #2A2620;
+  --color-gray-900: #1A1F2B;
+
+  --color-sky-50:  #EAF2F8;
+  --color-sky-100: #DCEAF6;
+  --color-sky-200: #CFE3F3;
+  --color-sky-300: #A9D4F5;
+  --color-sky-400: #4AA8E8;
+  --color-sky-500: #1D6FB8;
+  --color-sky-600: #1D6FB8;
+  --color-sky-700: #15558F;
+
+  /* ガイドなどの色分け（ティール・紫・オレンジ・ローズ）は青系に統一する */
+  --color-teal-50:  #EAF2F8;
+  --color-teal-200: #CFE3F3;
+  --color-teal-500: #1D6FB8;
+  --color-teal-600: #1D6FB8;
+  --color-teal-700: #15558F;
+  --color-purple-50:  #EAF2F8;
+  --color-purple-200: #CFE3F3;
+  --color-purple-500: #1D6FB8;
+  --color-purple-600: #1D6FB8;
+  --color-purple-700: #15558F;
+  --color-orange-50:  #EAF2F8;
+  --color-orange-200: #CFE3F3;
+  --color-orange-500: #1D6FB8;
+  --color-orange-600: #1D6FB8;
+  --color-orange-700: #15558F;
+  --color-rose-50:  #EAF2F8;
+  --color-rose-200: #CFE3F3;
+  --color-rose-500: #1D6FB8;
+  --color-rose-600: #1D6FB8;
+  --color-rose-700: #15558F;
+
+  --color-amber-50:  #FBF1E3;
+  --color-amber-200: #F0D3A8;
+  --color-amber-500: #A24A0C;
+  --color-amber-600: #8A3A00;
+  --color-amber-700: #6E2E00;
+}
+
+@layer base {
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  /* 影で浮かせるカード */
+  .card {
+    background: #FFFFFF;
+    border-radius: 18px;
+    box-shadow: 0 1px 2px rgba(70, 55, 30, 0.08), 0 8px 20px rgba(70, 55, 30, 0.07);
+  }
+  /* 押し込める主ボタン */
+  .btn-primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 0 20px;
+    border-radius: 14px;
+    background: var(--color-navy-900);
+    color: #FFFFFF;
+    font-weight: 700;
+    font-size: 15px;
+    box-shadow: 0 3px 0 var(--color-navy-950);
+    transition: transform 0.12s, box-shadow 0.12s;
+  }
+  .btn-primary:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--color-navy-950); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    padding: 0 20px;
+    border-radius: 14px;
+    background: #FFFFFF;
+    border: 1.5px solid var(--color-sand-400);
+    color: var(--color-navy-900);
+    font-weight: 700;
+    font-size: 14px;
+  }
+  /* 選択肢（はい・いいえなど） */
+  .choice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 13px 16px;
+    border-radius: 14px;
+    border: 1.5px solid var(--color-sand-400);
+    background: #FFFFFF;
+    text-align: left;
+    font-weight: 700;
+    transition: transform 0.12s, background 0.12s;
+  }
+  .choice:active { transform: translateY(1px); }
+  .choice[aria-pressed="true"], .choice[aria-checked="true"] {
+    border: 2px solid var(--color-brand-600);
+    background: var(--color-brand-50);
+  }
+  .field {
+    width: 100%;
+    height: 50px;
+    padding: 0 14px;
+    border-radius: 12px;
+    border: 1.5px solid var(--color-sand-400);
+    background: #FFFFFF;
+    font-size: 16px;
+    color: var(--color-ink);
+  }
+  .field:focus { outline: none; border-color: var(--color-brand-600); }
+}
+
+/* 壁を超えたときの通知・ハンコの演出 */
+@keyframes pop-in {
+  0%   { transform: scale(0.6) rotate(-14deg); opacity: 0; }
+  70%  { transform: scale(1.06) rotate(-11deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-12deg); opacity: 1; }
+}
+@keyframes toast-in {
+  0%   { transform: translateY(-8px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.anim-stamp { animation: pop-in 0.45s ease-out both; }
+.anim-toast { animation: toast-in 0.25s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-stamp, .anim-toast { animation: none; }
+  .choice, .btn-primary { transition: none; }
+}

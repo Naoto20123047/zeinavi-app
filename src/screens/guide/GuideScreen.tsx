@@ -1,12 +1,10 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import Sidebar from '../../components/Sidebar'
 import BottomNav from '../../components/BottomNav'
 import { Icons } from '../../components/Icons'
 import {
   WALL_LABELS,
-  formatMan,
   FILING_DEADLINE_LABEL,
-  SPECIAL_RULE_SALARY_CAP,
 } from '../../config/taxConfig'
 import { trackEvent, AnalyticsEvents } from '../../lib/analytics'
 
@@ -19,7 +17,7 @@ interface GuideStep {
 
 interface Guide {
   id:           string
-  emoji:        string
+  emoji:        ReactNode
   label:        string
   badge:        string
   badgeColor:   string
@@ -35,96 +33,96 @@ interface Guide {
 const GUIDES: Guide[] = [
   {
     id: 'part',
-    emoji: '💼', label: 'アルバイト・パート',
+    emoji: Icons.record, label: 'アルバイト・パート',
     badge: '給与収入', badgeColor: 'text-teal-700', badgeBg: 'bg-teal-50 border-teal-200',
     desc: '1か所または複数のバイトをしている場合の申告手順',
     headerBg: 'bg-teal-50', headerBorder: 'border-teal-200',
     steps: [
       { title: '源泉徴収票を集める',         body: '年末または退職時にバイト先からもらいます。掛け持ちの場合はすべての勤務先分を集めてください。紛失した場合は会社に再発行を依頼できます。' },
-      { title: '確定申告が必要か確認する',   body: `以下のいずれかに当てはまる場合は申告が必要です。①複数のバイト先がある ②年収が${WALL_LABELS.incomeTax}を超える ③年末調整が未実施・途中退職。ただし住民税は${WALL_LABELS.residentTax}超から課税されます。` },
-      { title: 'e-Taxで申告書を作成する',    body: '国税庁のe-Taxまたは確定申告書等作成コーナーで作成します。源泉徴収票の「支払金額」と「源泉徴収税額」を入力します。マイナンバーカードがあればスマホで完結します。' },
-      { title: '申告・納税または還付申請',   body: `2月16日〜${FILING_DEADLINE_LABEL}に申告します。還付申告の場合は1月1日から5年間いつでも申告できます。還付金は申告後3週間（e-Tax）〜2か月（書面）で指定口座に振り込まれます。` },
+      { title: '確定申告が必要か確認する',   body: `次のどれかに当てはまると申告が必要です。①2か所以上から給料があり、2か所目以降の給料と給料以外の所得の合計が${WALL_LABELS.sideIncome}を超える ②給料以外の所得が${WALL_LABELS.sideIncome}を超える。義務がなくても、年末調整を受けていなければ還付申告で税金が戻ることがあります。診断で確かめられます。` },
+      { title: 'e-Taxで申告書を作成する',    body: '国税庁の「確定申告書等作成コーナー」で作成します。源泉徴収票の「支払金額」「源泉徴収税額」などを入力します。マイナンバーカードがあれば、スマホからe-Taxで提出できます。' },
+      { title: '申告・納税または還付申請',   body: `申告が必要な人は2月16日〜${FILING_DEADLINE_LABEL}に申告します。還付申告だけの人は、翌年1月1日から5年間申告できます。還付金はe-Taxなら3週間ほど、書面なら1〜2か月ほどで口座に振り込まれます。` },
     ],
     notes: [
-      `年収${WALL_LABELS.incomeTax}以下（年収${formatMan(SPECIAL_RULE_SALARY_CAP)}以下の場合）でも、年末調整が未実施なら還付申告ができます。`,
-      `住民税は${WALL_LABELS.residentTax}を超えると課税されます。所得税の壁とは異なるので注意してください。`,
-      '掛け持ちバイトの場合、メインのバイト先以外は「乙欄」で源泉徴収されるため税額が高くなっています。確定申告で精算できます。',
+      `給料が${WALL_LABELS.incomeTax}以下で所得税が引かれている場合、年末調整を受けていなければ、還付申告で全額戻ることが多いです。`,
+      `住民税は、給料が${WALL_LABELS.residentTax}を超えるとかかり始める目安です（市区町村によって少し違います）。所得税の壁とは別です。`,
+      '掛け持ちの場合、扶養控除等申告書を出していない勤務先では、高めの税率で所得税が引かれています。確定申告で精算できます。',
     ],
-    docs: ['源泉徴収票（全勤務先分）', 'マイナンバーカード（または通知カード＋身分証）', '銀行口座情報（還付金の振込先）'],
+    docs: ['源泉徴収票（全勤務先分）', 'マイナンバーカード（ない場合は番号確認書類と本人確認書類）', '銀行口座情報（還付金の振込先）'],
   },
   {
     id: 'freelance',
-    emoji: '💻', label: '業務委託・フリーランス',
+    emoji: Icons.diagnose, label: '業務委託・フリーランス',
     badge: '事業所得・雑所得', badgeColor: 'text-purple-700', badgeBg: 'bg-purple-50 border-purple-200',
     desc: '個人で仕事を請け負っている場合の申告手順',
     headerBg: 'bg-purple-50', headerBorder: 'border-purple-200',
     steps: [
       { title: '収入と経費を整理する',       body: '報酬の合計額を集計し、業務に関わった経費（交通費・通信費・機材費・書籍代等）を整理します。経費の証明として領収書・レシートを必ず保管してください。' },
-      { title: '所得を計算する',             body: `所得 ＝ 収入 − 経費。年間の所得が${WALL_LABELS.sideIncome}を超えると確定申告が必要です。給与収入がある場合は給与と合算して判断します。` },
-      { title: '帳簿を作成する',             body: '事業所得として申告する場合、収支を記録した帳簿の作成が必要です。青色申告にすると最大65万円の特別控除が受けられます（事前に青色申告承認申請書の提出が必要）。' },
+      { title: '所得を計算する',             body: `所得 ＝ 収入 − 経費 です。給料をもらっている人は、この所得が${WALL_LABELS.sideIncome}を超えると申告が必要です。給料がない人は、所得が基礎控除などの合計を超えて所得税がかかる場合に申告が必要です。` },
+      { title: '帳簿を作成する',             body: '収入と経費は日付ごとに記録しておきます。事業として青色申告をすると最大65万円の特別控除がありますが、事前の申請と帳簿付けが必要です。' },
       { title: '確定申告書を作成・提出する', body: '事業所得または雑所得として申告します。e-Taxで作成するのが便利です。経費の内訳も入力します。' },
     ],
     notes: [
-      `業務委託の場合、経費を差し引いた「所得」が${WALL_LABELS.sideIncome}以下なら申告不要（給与収入がない場合）です。`,
+      `「${WALL_LABELS.sideIncome}以下なら申告不要」は、給料をもらっている人だけのルールです。住民税の申告は別に必要です。`,
       '継続して事業を行っている場合は「事業所得」、単発の場合は「雑所得」として申告します。',
-      `青色申告は申告前年の${FILING_DEADLINE_LABEL}までに申請が必要です。初年度は開業から2か月以内に申請できます。`,
+      '青色申告は、始めたい年の3月15日までに申請が必要です。1月16日以降に開業した場合は、開業から2か月以内です。',
     ],
     docs: ['支払調書（取引先から受け取る）', '経費の領収書・レシート', 'マイナンバーカード', '銀行口座情報'],
   },
   {
     id: 'flea',
-    emoji: '📦', label: 'フリマ・ネットオークション',
+    emoji: Icons.book, label: 'フリマ・ネットオークション',
     badge: '雑所得', badgeColor: 'text-amber-700', badgeBg: 'bg-amber-50 border-amber-200',
     desc: 'メルカリ・ヤフオクなどで収入がある場合の申告手順',
     headerBg: 'bg-amber-50', headerBorder: 'border-amber-200',
     steps: [
       { title: '課税対象か確認する',         body: '自分で使っていた不用品の売却は原則非課税です。仕入れて転売・継続的に販売している場合は課税対象となります。' },
       { title: '利益を計算する',             body: '所得 ＝ 売上 − 仕入れ値 − 送料 − 手数料。メルカリ・ヤフオクの取引履歴からデータをエクスポートして集計します。' },
-      { title: '申告が必要か判断する',       body: `副業の所得が年間${WALL_LABELS.sideIncome}を超える場合は確定申告が必要です。給与収入がある場合は「雑所得」として申告します。` },
+      { title: '申告が必要か判断する',       body: `給料をもらっている人は、販売などの所得が年間${WALL_LABELS.sideIncome}を超えると確定申告が必要です。給料がない人は、所得税がかかるかどうかで決まります。` },
       { title: '確定申告書を作成・提出する', body: '確定申告書の「雑所得」欄に収入・経費を記入します。給与収入がある場合は合算して申告します。' },
     ],
     notes: [
       '生活用動産（家具・衣類・家電等）の売却は、1個または1組の売却価格が30万円以下なら非課税です。',
       '転売目的で仕入れたものや、継続的に販売している場合は課税対象です。',
-      '取引履歴は各プラットフォームからCSVでダウンロードできます。早めに保存しておきましょう。',
+      '取引の履歴は、各サービスの画面で確認できます。早めに保存しておくと安心です。',
     ],
     docs: ['フリマ・オークションの取引履歴', '仕入れ時の領収書・レシート', 'マイナンバーカード', '銀行口座情報'],
   },
   {
     id: 'retire',
-    emoji: '📋', label: '途中退職・年末調整なし',
+    emoji: Icons.clock, label: '途中退職・年末調整なし',
     badge: '還付申告', badgeColor: 'text-rose-700', badgeBg: 'bg-rose-50 border-rose-200',
     desc: '年の途中で退職し年末調整を受けていない場合',
     headerBg: 'bg-rose-50', headerBorder: 'border-rose-200',
     steps: [
       { title: '源泉徴収票を受け取る',       body: '退職時に会社から源泉徴収票をもらいます。転職先がある場合は転職先に提出し、転職先で年末調整を受けます。' },
-      { title: '還付申告の期間を確認する',   body: '還付申告は1月1日から5年間いつでも申告可能です。義務ではありませんが、払いすぎた税金を取り戻せます。' },
+      { title: '還付申告の期間を確認する',   body: '還付申告は、翌年1月1日から5年間できます。義務ではありませんが、払いすぎた税金が戻ります。' },
       { title: '確定申告書を作成する',       body: '源泉徴収票の内容を入力します。社会保険料控除（国民年金・国保を自分で払った分）や生命保険料控除なども忘れずに入力しましょう。' },
-      { title: '還付金を受け取る',           body: '申告後3週間（e-Tax）〜2か月（書面）で指定口座に還付金が振り込まれます。' },
+      { title: '還付金を受け取る',           body: 'e-Taxなら3週間ほど、書面なら1〜2か月ほどで口座に振り込まれます。' },
     ],
     notes: [
       '退職後に転職した場合、前職の源泉徴収票を転職先に提出すれば転職先で年末調整を受けられます。',
-      '退職後に再就職しなかった場合は、自分で確定申告する必要があります。',
-      '退職した年に失業給付を受けた場合、失業給付は非課税のため申告不要です。',
+      '年内に再就職しなかった場合は、自分で還付申告をすると税金が戻ることがあります。',
+      '失業手当（基本手当）は非課税のため、申告に含めません。',
     ],
     docs: ['源泉徴収票（退職した会社分）', '社会保険料の控除証明書（国民年金等）', 'マイナンバーカード', '銀行口座情報'],
   },
   {
     id: 'deduction',
-    emoji: '💰', label: '控除で還付申告する',
+    emoji: Icons.check, label: '控除で還付申告する',
     badge: '各種控除', badgeColor: 'text-sky-700', badgeBg: 'bg-sky-50 border-sky-200',
     desc: '医療費・社会保険料・生命保険料などの控除がある場合',
     headerBg: 'bg-sky-50', headerBorder: 'border-sky-200',
     steps: [
-      { title: '適用できる控除を確認する',   body: '以下の控除が申告漏れになっていないか確認しましょう。①社会保険料控除（国民年金・国保を自分で払った分）②医療費控除（年間10万円超）③生命保険料控除（自分で加入）④寄付金控除（ふるさと納税等）⑤障害者控除' },
+      { title: '適用できる控除を確認する',   body: '以下の控除が申告漏れになっていないか確認しましょう。①社会保険料控除（国民年金・国保を自分で払った分）②医療費控除（年10万円、または所得の5%を超えた分）③生命保険料控除（自分で加入）④寄付金控除（ふるさと納税等）⑤障害者控除' },
       { title: '必要書類を集める',           body: '各控除の証明書類を集めます。社会保険料は控除証明書、医療費は領収書、生命保険は控除証明書、ふるさと納税は寄附金受領証明書が必要です。' },
       { title: '確定申告書を作成する',       body: 'e-Taxで申告書を作成し、各控除の金額を入力します。源泉徴収票の内容と合わせて入力します。' },
-      { title: '還付金を受け取る',           body: '申告後3週間（e-Tax）〜2か月（書面）で還付金が振り込まれます。還付申告は1月1日から5年間いつでも申告できます。' },
+      { title: '還付金を受け取る',           body: 'e-Taxなら3週間ほど、書面なら1〜2か月ほどで振り込まれます。還付申告は翌年1月1日から5年間できます。' },
     ],
     notes: [
-      '医療費控除は年間の医療費（交通費含む）が10万円を超えた場合に適用できます。',
-      '国民年金は学生納付特例で猶予された場合、実際に支払った年に控除が受けられます。',
-      'ふるさと納税は確定申告またはワンストップ特例制度のどちらかで手続きが必要です。',
+      '医療費控除は、家族の分も合わせた医療費（通院の交通費を含む）から保険などで戻った額を引き、10万円（所得が200万円未満なら所得の5%）を超えた分です。',
+      '学生納付特例で猶予された国民年金を後から納めた場合は、納めた年の控除になります。',
+      'ふるさと納税は、確定申告かワンストップ特例のどちらかで手続きします。確定申告をする場合、ワンストップ特例は使えなくなります。',
     ],
     docs: ['源泉徴収票', '各控除の証明書（社会保険料・生命保険料等）', '医療費の領収書（医療費控除の場合）', '寄附金受領証明書（ふるさと納税の場合）', 'マイナンバーカード', '銀行口座情報'],
   },
@@ -161,7 +159,7 @@ function GuideList({ onSelect, onNavigate }: {
             {GUIDES.map((g) => (
               <button key={g.id} onClick={() => onSelect(g.id)}
                 className={`flex items-center gap-4 p-4 rounded-2xl border ${g.headerBg} ${g.headerBorder} text-left w-full transition-all active:scale-95`}>
-                <span className="text-3xl flex-shrink-0">{g.emoji}</span>
+                <span className="w-11 h-11 rounded-xl bg-white text-navy-900 grid place-items-center flex-shrink-0">{g.emoji}</span>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <p className="text-gray-800 text-sm font-bold">{g.label}</p>
@@ -195,7 +193,7 @@ function GuideList({ onSelect, onNavigate }: {
               {GUIDES.map((g) => (
                 <button key={g.id} onClick={() => onSelect(g.id)}
                   className={`flex items-center gap-4 p-5 rounded-2xl border ${g.headerBg} ${g.headerBorder} text-left w-full transition-all hover:opacity-80`}>
-                  <span className="text-4xl flex-shrink-0">{g.emoji}</span>
+                  <span className="w-11 h-11 rounded-xl bg-white text-navy-900 grid place-items-center flex-shrink-0">{g.emoji}</span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1.5">
                       <p className="text-gray-800 text-sm font-bold">{g.label}</p>
@@ -240,7 +238,7 @@ function GuideDetail({ guide, onBack, onNavigate }: {
               {Icons.back}
             </button>
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className="text-2xl flex-shrink-0">{guide.emoji}</span>
+              <span className="w-11 h-11 rounded-xl bg-navy-800 text-white grid place-items-center flex-shrink-0">{guide.emoji}</span>
               <div className="min-w-0">
                 <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${guide.badgeColor} ${guide.badgeBg} inline-block mb-0.5`}>
                   {guide.badge}
@@ -283,7 +281,7 @@ function GuideDetail({ guide, onBack, onNavigate }: {
             <div className="flex flex-col gap-2">
               {guide.notes.map((note, i) => (
                 <div key={i} className="flex items-start gap-2">
-                  <span className="text-sky-500 flex-shrink-0 mt-0.5">ℹ️</span>
+                  <span className="text-sky-500 flex-shrink-0 mt-0.5">・</span>
                   <p className="text-sky-700 text-xs leading-relaxed">{note}</p>
                 </div>
               ))}
@@ -335,7 +333,7 @@ function GuideDetail({ guide, onBack, onNavigate }: {
               <span>ガイド一覧に戻る</span>
             </button>
             <div className="flex items-center gap-4">
-              <span className="text-5xl">{guide.emoji}</span>
+              <span className="w-11 h-11 rounded-xl bg-navy-800 text-white grid place-items-center flex-shrink-0">{guide.emoji}</span>
               <div>
                 <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${guide.badgeColor} ${guide.badgeBg} inline-block mb-2`}>
                   {guide.badge}
@@ -386,7 +384,7 @@ function GuideDetail({ guide, onBack, onNavigate }: {
                     <div className="flex flex-col gap-3">
                       {guide.notes.map((note, i) => (
                         <div key={i} className="flex items-start gap-2">
-                          <span className="text-sky-500 flex-shrink-0 mt-0.5">ℹ️</span>
+                          <span className="text-sky-500 flex-shrink-0 mt-0.5">・</span>
                           <p className="text-sky-700 text-sm leading-relaxed">{note}</p>
                         </div>
                       ))}

@@ -12,9 +12,9 @@ export default defineConfig({
       manifest: {
         name: '確定申告ナビ',
         short_name: '確定申告ナビ',
-        description: '学生向け確定申告サポートアプリ',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        description: 'はじめての確定申告をサポート。申告が必要か、いくら戻るかがわかります',
+        theme_color: '#1E2C47',
+        background_color: '#F7F5F0',
         display: 'standalone',
         start_url: '/',
         icons: [

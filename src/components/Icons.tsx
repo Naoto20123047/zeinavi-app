@@ -31,4 +31,5 @@ export const Icons = {
   chevron:  icon('M19 9l-7 7-7-7', 16, 2),
   back:     icon('M15 19l-7-7 7-7', 18, 2),
   send:     icon('M12 19l9 2-9-18-9 18 9-2zm0 0v-8', 18, 2),
+  user:     icon('M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z', 18),
 } as const
