@@ -79,7 +79,7 @@ function ProgressBar({ checked, total, required, requiredDone }: {
           style={{ width:`${pct}%` }} />
       </div>
       {allRequiredDone && checked > 0 && (
-        <p className="text-teal-600 text-xs font-semibold mt-1.5">✅ 必須書類がすべて揃いました！</p>
+        <p className="text-teal-600 text-xs font-semibold mt-1.5">必須の書類がすべてそろいました。</p>
       )}
     </div>
   )

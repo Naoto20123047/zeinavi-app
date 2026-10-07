@@ -1,37 +1,46 @@
-import { useState } from 'react'
-import { useIncomes } from '../hooks/useRecords'
-import { auth } from '../lib/firebase'
+// ホーム：プロフィールに合わせて、いちばん関係のある情報を上に出す
+import { useMemo, useState } from 'react'
 import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
 } from 'firebase/auth'
-import Sidebar from '../components/Sidebar'
-import BottomNav from '../components/BottomNav'
+import { auth } from '../lib/firebase'
+import { trackEvent, AnalyticsEvents } from '../lib/analytics'
+import { useIncomes, useExpenses } from '../hooks/useRecords'
+import { useDiagnosisResults, RESULT_LABELS, type DiagnosisResult } from '../hooks/useDiagnosisResult'
+import AppShell from '../components/AppShell'
 import { Icons } from '../components/Icons'
 import {
-  WALL_LABELS,
+  TAX_YEAR,
   INCOME_BAR_LIMIT,
   FILING_DEADLINE_FULL_LABEL,
+  FILING_RULES,
+  formatMan,
+  formatYen,
 } from '../config/taxConfig'
+import { daysUntilDeadline } from '../utils/dates'
+import { diagnose } from '../utils/diagnose'
+import { relevantWalls, isOver } from '../utils/walls'
+import type { Profile } from '../types/profile'
+import type { DiagnosisAnswers } from '../types/diagnosis'
 
-
-// ── メニューアイテム定義 ─────────────────────────────────
+// ── メニュー ─────────────────────────────────────────────
 const MENU_ITEMS = [
-  { icon: Icons.book,   label: 'ケース別ガイド',   sub: 'バイト・業務委託・フリマ', iconBg: 'bg-teal-500',   screen: 'guide'  },
-  { icon: Icons.record, label: '収入・経費の記録', sub: '毎月の入出金を記録',       iconBg: 'bg-orange-500', screen: 'record' },
-  { icon: Icons.chat,   label: 'AIチャット',       sub: '疑問をすぐ相談',           iconBg: 'bg-sky-500',    screen: 'chat'   },
-  { icon: Icons.check,  label: '書類チェック',     sub: '源泉徴収票・マイナンバー', iconBg: 'bg-slate-500',  screen: 'check'  },
+  { icon: Icons.book,   label: 'ケース別ガイド',     sub: '申告の手順を状況別に', screen: 'guide'  },
+  { icon: Icons.check,  label: '書類チェック',       sub: '必要な書類を確認',     screen: 'check'  },
+  { icon: Icons.record, label: '収入・経費の記録',   sub: '毎月の入出金を記録',   screen: 'record' },
+  { icon: Icons.chat,   label: 'AIに相談',           sub: '言葉の意味などを質問', screen: 'chat'   },
 ]
 
-// ── パスワード変更モーダル ────────────────────────────────
+// ── パスワード変更 ────────────────────────────────────────
 function PasswordChangeModal({ onClose }: { onClose: () => void }) {
-  const [currentPassword,  setCurrentPassword]  = useState('')
-  const [newPassword,      setNewPassword]      = useState('')
-  const [confirmPassword,  setConfirmPassword]  = useState('')
-  const [error,            setError]            = useState('')
-  const [success,          setSuccess]          = useState(false)
-  const [loading,          setLoading]          = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword]         = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError]     = useState('')
+  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async () => {
     setError('')
@@ -44,20 +53,21 @@ function PasswordChangeModal({ onClose }: { onClose: () => void }) {
     if (newPassword !== confirmPassword) {
       setError('新しいパスワードが一致しません'); return
     }
+    const user = auth.currentUser
+    if (!user?.email) {
+      setError('ログイン情報を確認できませんでした'); return
+    }
     setLoading(true)
     try {
-      const user       = auth.currentUser!
-      const credential = EmailAuthProvider.credential(user.email!, currentPassword)
+      const credential = EmailAuthProvider.credential(user.email, currentPassword)
       await reauthenticateWithCredential(user, credential)
       await updatePassword(user, newPassword)
       setSuccess(true)
     } catch (e: unknown) {
       const code = (e as { code?: string }).code
-      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        setError('現在のパスワードが正しくありません')
-      } else {
-        setError('パスワードの変更に失敗しました')
-      }
+      setError(code === 'auth/wrong-password' || code === 'auth/invalid-credential'
+        ? '現在のパスワードが正しくありません'
+        : 'パスワードの変更に失敗しました')
     } finally {
       setLoading(false)
     }
@@ -65,348 +75,348 @@ function PasswordChangeModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full md:max-w-sm bg-white rounded-t-3xl md:rounded-3xl p-6 z-10">
+      <div className="absolute inset-0 bg-navy-950/40" onClick={onClose} />
+      <div role="dialog" aria-modal="true" aria-labelledby="pw-title" className="relative w-full md:max-w-sm bg-white rounded-t-3xl md:rounded-3xl p-6 z-10">
         {success ? (
-          <div className="text-center py-4">
-            <div className="text-4xl mb-3">✅</div>
-            <p className="text-gray-800 font-bold text-base mb-1">パスワードを変更しました</p>
-            <p className="text-gray-400 text-sm mb-6">次回から新しいパスワードでログインしてください</p>
-            <button onClick={onClose}
-              className="w-full bg-slate-800 text-white font-bold rounded-xl py-3 text-sm">
-              閉じる
-            </button>
+          <div className="flex flex-col gap-3 text-center py-2">
+            <p className="font-bold">パスワードを変更しました</p>
+            <p className="text-sm text-muted m-0">次回から新しいパスワードでログインしてください。</p>
+            <button type="button" onClick={onClose} className="btn-primary mt-3">閉じる</button>
           </div>
         ) : (
-          <>
-            <h3 className="text-gray-900 font-bold text-base mb-5">パスワードを変更</h3>
-            <div className="flex flex-col gap-4">
-              <div>
-                <label className="text-gray-500 text-xs mb-1.5 block">現在のパスワード</label>
-                <input type="password" placeholder="現在のパスワード" value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-sky-500 placeholder-gray-300" />
+          <div className="flex flex-col gap-4">
+            <h3 id="pw-title" className="font-bold text-base m-0">パスワードを変更</h3>
+            {([
+              ['pw-cur', '現在のパスワード', currentPassword, setCurrentPassword, ''],
+              ['pw-new', '新しいパスワード', newPassword, setNewPassword, '6文字以上'],
+              ['pw-cfm', '新しいパスワード（確認）', confirmPassword, setConfirmPassword, 'もう一度入力'],
+            ] as const).map(([id, label, value, set, ph]) => (
+              <div key={id} className="flex flex-col gap-1.5">
+                <label htmlFor={id} className="text-xs text-muted">{label}</label>
+                <input id={id} type="password" className="field" placeholder={ph} value={value} onChange={(e) => set(e.target.value)} />
               </div>
-              <div>
-                <label className="text-gray-500 text-xs mb-1.5 block">新しいパスワード</label>
-                <input type="password" placeholder="6文字以上" value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-sky-500 placeholder-gray-300" />
-              </div>
-              <div>
-                <label className="text-gray-500 text-xs mb-1.5 block">新しいパスワード（確認）</label>
-                <input type="password" placeholder="もう一度入力" value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-900 outline-none focus:border-sky-500 placeholder-gray-300" />
-              </div>
-              {error && <p className="text-red-500 text-xs text-center">{error}</p>}
-              <button onClick={handleSubmit} disabled={loading}
-                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl py-3 text-sm disabled:opacity-40 transition-colors">
-                {loading ? '変更中...' : 'パスワードを変更する'}
-              </button>
-              <button onClick={onClose} className="w-full text-gray-400 text-sm py-2">
-                キャンセル
-              </button>
-            </div>
-          </>
+            ))}
+            {error && <p className="text-warn-700 text-xs text-center m-0">{error}</p>}
+            <button type="button" onClick={handleSubmit} disabled={loading} className="btn-primary">
+              {loading ? '変更しています' : 'パスワードを変更する'}
+            </button>
+            <button type="button" onClick={onClose} className="text-muted text-sm py-2">キャンセル</button>
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-// ── 収入プログレスバー ────────────────────────────────────
-function IncomeBar() {
-  const { incomes, loading } = useIncomes()
-  const limit   = INCOME_BAR_LIMIT
-  const current = incomes.reduce((s, r) => s + r.amount, 0)
-  const pct     = Math.min(Math.round((current / limit) * 100), 100)
-  const remain  = Math.max(limit - current, 0)
-  const isOver  = current > limit
-
-  if (loading) {
-    return (
-      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-        <p className="text-gray-400 text-xs text-center py-2">読み込み中...</p>
-      </div>
-    )
-  }
+// ── 給料の壁メーター（学生・扶養に入っている人・パート向け） ──
+function WallMeter({ profile, salary, loading }: { profile: Profile; salary: number; loading: boolean }) {
+  const walls = relevantWalls(profile)
+  const limit = INCOME_BAR_LIMIT
+  const nextWall = walls.find((w) => !isOver(w, salary))
+  const pct = (v: number) => `${Math.min((v / limit) * 100, 100)}%`
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-gray-400 text-xs">今年の収入記録</span>
-        <span className="text-gray-400 text-xs">{WALL_LABELS.dependentInsurance}まで</span>
+    <section className="card p-5 md:p-6 flex flex-col gap-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-bold m-0">{TAX_YEAR}年の給料と「壁」</h2>
+        <span className="text-[11.5px] text-muted">記録した給料から計算</span>
       </div>
-      <div className="flex items-baseline justify-between mb-3">
-        <span className={`text-2xl font-bold ${isOver ? 'text-red-500' : 'text-gray-900'}`}>
-          ¥{current.toLocaleString()}
+      <div className="flex flex-col gap-0.5">
+        <span className="font-display text-[34px] font-black tabular-nums leading-tight">{loading ? '…' : formatYen(salary)}</span>
+        <span className="text-[13px] text-muted">
+          {nextWall
+            ? <>次の壁（{nextWall.short}・{formatMan(nextWall.amount)}）まで あと<b className="text-ink tabular-nums">{formatYen(Math.max(nextWall.amount - salary, 0))}</b></>
+            : '表示している壁はすべて超えています'}
         </span>
-        <span className="text-gray-400 text-sm">
-          {isOver ? '⚠️ 上限超過' : `残り ¥${remain.toLocaleString()}`}
-        </span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-1.5">
-        <div
-          className={`h-1.5 rounded-full transition-all ${isOver ? 'bg-red-500' : 'bg-sky-500'}`}
-          style={{ width: `${pct}%` }}
-        />
+
+      {/* メーター本体：壁の位置に目盛りを置く */}
+      <div className="relative pt-1 pb-9" aria-hidden="true">
+        <div className="h-3 rounded-full bg-sand-200 overflow-hidden">
+          <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: pct(salary) }} />
+        </div>
+        {walls.map((w, i) => (
+          <div key={w.id} className="absolute top-0 flex flex-col items-center -translate-x-1/2" style={{ left: pct(w.amount) }}>
+            <span className={`w-0.5 h-5 ${isOver(w, salary) ? 'bg-navy-900' : 'bg-sand-500'}`} />
+            <span className={`text-[10px] whitespace-nowrap mt-0.5 ${i % 2 ? 'translate-y-3.5' : ''} ${isOver(w, salary) ? 'text-navy-900 font-bold' : 'text-muted'}`}>
+              {w.short}
+            </span>
+          </div>
+        ))}
       </div>
-      {current === 0 && (
-        <p className="text-gray-400 text-xs mt-2">収入を記録すると表示されます</p>
-      )}
-    </div>
+
+      {nextWall && <p className="text-[12.5px] leading-relaxed text-muted m-0 border-t border-sand-200 pt-3">{nextWall.body}</p>}
+    </section>
   )
 }
 
-// ── 診断CTAカード ────────────────────────────────────────
-function DiagnosisCTA({ onNavigate }: { onNavigate: (screen: string) => void }) {
+// ── 給料以外の所得（会社員・フリーランスなど向け） ─────────
+function SideIncomeCard({ income, loading }: { income: number; loading: boolean }) {
+  const limit = FILING_RULES.sideIncomeExemption
+  const over = income > limit
+  return (
+    <section className="card p-5 md:p-6 flex flex-col gap-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-bold m-0">給料以外の所得</h2>
+        <span className="text-[11.5px] text-muted">記録から計算（収入−経費）</span>
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className={`font-display text-[34px] font-black tabular-nums leading-tight ${over ? 'text-warn-700' : ''}`}>
+          {loading ? '…' : formatYen(income)}
+        </span>
+        <span className="text-sm text-muted">／ {formatMan(limit)}</span>
+      </div>
+      <div className="h-3 rounded-full bg-sand-200 overflow-hidden" aria-hidden="true">
+        <div className={`h-full rounded-full transition-all ${over ? 'bg-warn-700' : 'bg-brand-600'}`} style={{ width: `${Math.min((income / limit) * 100, 100)}%` }} />
+      </div>
+      <p className="text-[12.5px] leading-relaxed text-muted m-0">
+        {over
+          ? `${formatMan(limit)}を超えているため、会社員の人も確定申告が必要になる見込みです。`
+          : `給料が1か所の人は、給料以外の所得が${formatMan(limit)}以下なら所得税の確定申告は不要です（住民税の申告は必要です）。`}
+        フリマで自分の物を売った分は含めていません。
+      </p>
+    </section>
+  )
+}
+
+/** 申告すると戻る可能性があるもの（会社員・パートなど向け） */
+function RefundHints({ onNavigate }: { onNavigate: (s: string) => void }) {
+  const items = [
+    ['医療費が多かった', '家族の分も合わせて年10万円（または所得の5%）を超えた'],
+    ['ふるさと納税をした', '6か所以上に寄付した、またはワンストップ特例を出していない'],
+    ['年の途中で仕事をやめた', '12月までに次の勤務先で年末調整を受けていない'],
+    ['住宅ローンを組んだ', '住み始めた最初の年'],
+  ]
+  return (
+    <section className="card p-5 md:p-6 flex flex-col gap-3">
+      <h2 className="text-sm font-bold m-0">申告すると戻る可能性があるもの</h2>
+      <ul className="flex flex-col gap-2.5 m-0 p-0 list-none">
+        {items.map(([t, s]) => (
+          <li key={t} className="flex gap-2.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-600 mt-2 flex-shrink-0" aria-hidden="true" />
+            <span className="flex flex-col">
+              <span className="text-sm font-bold">{t}</span>
+              <span className="text-xs text-muted leading-relaxed">{s}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button type="button" onClick={() => onNavigate('diagnose')} className="text-sm font-bold text-brand-600 self-start">
+        当てはまるか診断で確かめる
+      </button>
+    </section>
+  )
+}
+
+// ── 前回の診断結果 ───────────────────────────────────────
+function LastResultCard({ result, profile, onNavigate }: {
+  result: DiagnosisResult; profile: Profile; onNavigate: (s: string) => void
+}) {
+  // version 2 は回答から計算し直す（プロフィールの変更も反映される）
+  const outcome = result.answers?.version === 2 ? diagnose(profile, result.answers as DiagnosisAnswers) : null
+  const status = outcome?.status ?? result.resultType
+  const amount =
+    outcome && outcome.paymentAmount > 0 ? `納める見込み ${formatYen(outcome.paymentAmount)}` :
+    outcome && outcome.refundAmount > 0  ? `戻る見込み ${formatYen(outcome.refundAmount)}` : null
+  const date = result.createdAt.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })
+
+  return (
+    <section className="card p-5 md:p-6 flex flex-col gap-3">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-bold m-0">前回の診断</h2>
+        <span className="text-[11.5px] text-muted">{date}</span>
+      </div>
+      <p className="font-display text-xl font-black m-0">{RESULT_LABELS[status]}</p>
+      {amount && <p className={`text-sm font-bold tabular-nums m-0 ${outcome?.paymentAmount ? 'text-navy-900' : 'text-brand-600'}`}>{amount}</p>}
+      {!outcome && <p className="text-xs text-muted m-0">以前の形式の診断です。新しい診断では金額の見込みも出せます。</p>}
+      <button type="button" onClick={() => onNavigate('diagnose')} className="btn-secondary mt-1">もう一度診断する</button>
+    </section>
+  )
+}
+
+/** 自分に関係する壁の一覧 */
+function WallList({ profile }: { profile: Profile }) {
+  const walls = relevantWalls(profile)
+  return (
+    <section className="card p-5 flex flex-col gap-3">
+      <h2 className="text-sm font-bold m-0">あなたに関係する壁（給料の額）</h2>
+      <dl className="flex flex-col m-0">
+        {walls.map((w) => (
+          <div key={w.id} className="flex justify-between gap-3 py-2.5 border-b border-sand-200 last:border-0">
+            <dt className="text-sm">{w.short}</dt>
+            <dd className="text-sm font-bold tabular-nums m-0">{formatMan(w.amount)}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-[11.5px] text-muted leading-relaxed m-0">プロフィールの内容から選んでいます。</p>
+    </section>
+  )
+}
+
+function DiagnosisCTA({ onNavigate }: { onNavigate: (s: string) => void }) {
   return (
     <button
+      type="button"
       onClick={() => onNavigate('diagnose')}
-      className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
+      className="w-full rounded-[22px] bg-navy-900 text-white p-5 md:p-6 text-left flex items-center gap-4 hover:bg-navy-800 transition-colors"
     >
-      <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0 text-white">
-        {Icons.diagnose}
-      </div>
-      <div className="flex-1">
-        <p className="text-gray-400 text-xs mb-0.5">まずはここから</p>
-        <p className="text-gray-900 font-bold text-sm leading-tight">確定申告が必要か診断する</p>
-        <p className="text-gray-400 text-xs mt-0.5">基本情報の入力・約3分</p>
-      </div>
-      <span className="text-gray-400">{Icons.arrow}</span>
+      <span className="w-12 h-12 rounded-2xl bg-brand-600 grid place-items-center flex-shrink-0">{Icons.diagnose}</span>
+      <span className="flex-1 flex flex-col gap-0.5">
+        <span className="text-xs text-slate-300">まずはここから</span>
+        <span className="font-display text-lg font-black leading-snug">確定申告が必要か、いくら戻るかを診断する</span>
+        <span className="text-xs text-slate-300">答えるたびに見込み額が出ます・5〜10分</span>
+      </span>
+      <span className="text-slate-300">{Icons.arrow}</span>
     </button>
   )
 }
 
-// ── 期限カード ───────────────────────────────────────────
 function DeadlineCard() {
-  const deadline = new Date('2027-03-15')
-  const today    = new Date()
-  const daysLeft = Math.max(Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)), 0)
-
   return (
-    <button className="w-full flex items-center gap-4 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 active:scale-95 transition-all">
-      <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0 text-white">
-        {Icons.clock}
+    <section className="card p-5 flex md:hidden items-center gap-4">
+      <span className="w-11 h-11 rounded-2xl bg-sand-200 grid place-items-center text-navy-900 flex-shrink-0">{Icons.clock}</span>
+      <div className="flex flex-col">
+        <span className="text-xs text-muted">申告期限まで</span>
+        <span className="font-display text-2xl font-black tabular-nums leading-tight">{daysUntilDeadline()}<span className="text-sm ml-0.5">日</span></span>
+        <span className="text-[11.5px] text-muted">{FILING_DEADLINE_FULL_LABEL}</span>
       </div>
-      <div className="flex-1">
-        <p className="text-gray-400 text-xs mb-0.5">今年の確定申告期限まで</p>
-        <p className="text-gray-900 font-bold text-lg leading-tight">
-          あと <span className="text-2xl">{daysLeft}</span>日
-        </p>
-        <p className="text-gray-400 text-xs mt-0.5">締め切り {FILING_DEADLINE_FULL_LABEL}</p>
-      </div>
-      <span className="text-gray-400">{Icons.arrow}</span>
-    </button>
+    </section>
   )
 }
 
-// ── メニューリスト ───────────────────────────────────────
-function MenuList({ onNavigate }: { onNavigate: (screen: string) => void }) {
+function MenuGrid({ onNavigate }: { onNavigate: (s: string) => void }) {
   return (
-    <div>
-      <p className="text-gray-400 text-xs font-semibold tracking-wider mb-3 px-1">メニュー</p>
-      <div className="flex flex-col gap-2">
+    <section className="flex flex-col gap-3">
+      <h2 className="text-xs font-bold text-muted m-0 px-1">メニュー</h2>
+      <div className="grid grid-cols-2 gap-3">
         {MENU_ITEMS.map((item) => (
           <button
-            key={item.label}
-            onClick={() => { if (item.screen) onNavigate(item.screen) }}
-            className="flex items-center gap-4 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 active:scale-95 transition-all"
+            key={item.screen}
+            type="button"
+            onClick={() => onNavigate(item.screen)}
+            className="card p-4 flex flex-col md:flex-row md:items-center gap-2.5 md:gap-3 text-left hover:bg-sand-50 transition-colors"
           >
-            <div className={`w-10 h-10 ${item.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 text-white`}>
-              {item.icon}
-            </div>
-            <div className="flex-1">
-              <p className="text-gray-900 text-sm font-semibold">{item.label}</p>
-              <p className="text-gray-400 text-xs mt-0.5">{item.sub}</p>
-            </div>
-            <span className="text-gray-300">{Icons.arrow}</span>
+            <span className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 grid place-items-center flex-shrink-0">{item.icon}</span>
+            <span className="flex flex-col">
+              <span className="text-sm font-bold">{item.label}</span>
+              <span className="text-[11.5px] text-muted">{item.sub}</span>
+            </span>
           </button>
         ))}
       </div>
-    </div>
+    </section>
   )
 }
 
-
-
-// ── メインコンポーネント ────────────────────────────────
-export default function HomeScreen({ onNavigate }: { onNavigate: (screen: string) => void }) {
+// ── 本体 ────────────────────────────────────────────────
+export default function HomeScreen({ onNavigate, profile }: {
+  onNavigate: (screen: string) => void
+  profile: Profile
+}) {
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const { incomes, loading: incomesLoading } = useIncomes()
+  const { expenses } = useExpenses()
+  const { latestResult } = useDiagnosisResults()
 
-  const today = new Date().toLocaleDateString('ja-JP', {
-    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'
-  })
+  const isGoogleUser = auth.currentUser?.providerData.some((p) => p.providerId === 'google.com') ?? false
+  const handleSignOut = async () => {
+    trackEvent(AnalyticsEvents.logout)
+    await auth.signOut()
+  }
 
-  // Googleログインユーザーかどうか判定
-  const isGoogleUser = auth.currentUser?.providerData.some(
-    (p) => p.providerId === 'google.com'
-  ) ?? false
+  // 給料の壁を中心に見せる人：学生、家族の扶養に入っている人、パート・アルバイト
+  const showWalls =
+    profile.role === 'student' ||
+    profile.role === 'partTime' ||
+    profile.dependentOf === 'parent' ||
+    profile.dependentOf === 'spouse' ||
+    !profile.role
+
+  const { salary, sideIncome } = useMemo(() => {
+    const salary = incomes.filter((r) => r.type === 'アルバイト').reduce((s, r) => s + r.amount, 0)
+    const sideRevenue = incomes.filter((r) => r.type === '業務委託' || r.type === 'その他').reduce((s, r) => s + r.amount, 0)
+    const expenseTotal = expenses.reduce((s, r) => s + r.amount, 0)
+    return { salary, sideIncome: Math.max(sideRevenue - expenseTotal, 0) }
+  }, [incomes, expenses])
+
+  const today = new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
+
+  const main = showWalls
+    ? <WallMeter profile={profile} salary={salary} loading={incomesLoading} />
+    : <SideIncomeCard income={sideIncome} loading={incomesLoading} />
 
   return (
-    <>
-      {/* ══ モバイル表示 ══ */}
-      <div className="md:hidden min-h-screen bg-gray-100">
-
-        {/* ヘッダー */}
-        <div className="px-5 pt-14 pb-4 bg-slate-800">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-slate-400 text-xs font-semibold tracking-widest mb-1">学生向け</p>
-              <h1 className="text-white text-2xl font-bold">確定申告ナビ</h1>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              {!isGoogleUser && (
-                <button onClick={() => setShowPasswordModal(true)}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400">
-                  {Icons.key}
-                </button>
-              )}
-              <button onClick={() => auth.signOut()}
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-700 border border-slate-600 text-slate-400">
-                {Icons.logout}
-              </button>
-            </div>
-          </div>
+    <AppShell
+      active="home"
+      onNavigate={onNavigate}
+      onPasswordChange={isGoogleUser ? undefined : () => setShowPasswordModal(true)}
+    >
+      {/* スマホの上部 */}
+      <header className="md:hidden bg-navy-900 text-white px-5 pt-12 pb-6 flex items-start justify-between">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[11.5px] text-slate-300">{TAX_YEAR}年分（令和8年分）</span>
+          <span className="font-display text-2xl font-black">確定申告ナビ</span>
         </div>
-
-        {/* スクロールエリア */}
-        <div className="px-4 pt-4 pb-28 flex flex-col gap-3">
-          <IncomeBar />
-          <DiagnosisCTA onNavigate={onNavigate} />
-          <DeadlineCard />
-          <MenuList onNavigate={onNavigate} />
-          <p className="text-gray-400 text-xs text-center pt-2 leading-relaxed">
-            ※ 本アプリの情報は参考情報です。<br />
-            最終的な判断は税務署または税理士にご相談ください。
-          </p>
-        </div>
-
-        <BottomNav active="home" onNavigate={onNavigate} />
-      </div>
-
-      {/* ══ デスクトップ表示 ══ */}
-      <div className="hidden md:flex min-h-screen bg-gray-100">
-
-        <Sidebar
-          active="home"
-          onNavigate={onNavigate}
-          onPasswordChange={() => setShowPasswordModal(true)}
-        />
-
-        <div className="flex-1 overflow-auto flex flex-col min-h-screen">
-
-          {/* ページヘッダー */}
-          <div className="flex justify-between items-center px-8 py-5 bg-slate-800 border-b border-slate-700">
-            <div>
-              <h2 className="text-white text-xl font-bold">ホーム</h2>
-              <p className="text-slate-400 text-sm mt-0.5">{today}</p>
-            </div>
-            <button onClick={() => auth.signOut()}
-              className="flex items-center gap-2 text-slate-400 hover:text-slate-200 bg-slate-700 border border-slate-600 px-4 py-2 rounded-xl text-sm transition-colors">
-              {Icons.logout}
-              ログアウト
+        <div className="flex gap-2">
+          <button type="button" onClick={() => onNavigate('profile')} aria-label="プロフィールを変更"
+            className="w-10 h-10 rounded-xl bg-navy-800 grid place-items-center text-slate-300">
+            {Icons.user}
+          </button>
+          {!isGoogleUser && (
+            <button type="button" onClick={() => setShowPasswordModal(true)} aria-label="パスワードを変更"
+              className="w-10 h-10 rounded-xl bg-navy-800 grid place-items-center text-slate-300">
+              {Icons.key}
             </button>
+          )}
+          <button type="button" onClick={handleSignOut} aria-label="ログアウト"
+            className="w-10 h-10 rounded-xl bg-navy-800 grid place-items-center text-slate-300">
+            {Icons.logout}
+          </button>
+        </div>
+      </header>
+
+      {/* PCの上部 */}
+      <header className="hidden md:flex items-end justify-between px-12 pt-10 pb-2 max-w-[1120px] w-full mx-auto">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted">{today}</span>
+          <h1 className="font-display text-[28px] font-black m-0">ホーム</h1>
+        </div>
+      </header>
+
+      <main className="flex-1 px-4 md:px-12 pt-4 md:pt-6 pb-8 max-w-[1120px] w-full mx-auto flex flex-col gap-4">
+        {!profile.onboardingDone && (
+          <button
+            type="button"
+            onClick={() => onNavigate('profile')}
+            className="card p-4 text-left flex items-center gap-3 border-brand-600"
+          >
+            <span className="flex-1 flex flex-col gap-0.5">
+              <span className="text-sm font-bold">プロフィールを登録してください</span>
+              <span className="text-xs text-muted">学生かどうかや扶養の状況に合わせて、表示と診断が正確になります。1分ほどで終わります。</span>
+            </span>
+            <span className="text-muted">{Icons.arrow}</span>
+          </button>
+        )}
+
+        <div className="md:grid md:grid-cols-[1fr_340px] md:gap-6 flex flex-col gap-4">
+          <div className="flex flex-col gap-4 min-w-0">
+            {!latestResult && <DiagnosisCTA onNavigate={onNavigate} />}
+            {main}
+            <MenuGrid onNavigate={onNavigate} />
           </div>
-
-          {/* コンテンツ */}
-          <div className="p-8">
-            <div className="max-w-5xl grid grid-cols-5 gap-6">
-
-              {/* 左カラム（3/5） */}
-              <div className="col-span-3 flex flex-col gap-4">
-                <IncomeBar />
-                <div className="grid grid-cols-2 gap-3">
-                  <DiagnosisCTA onNavigate={onNavigate} />
-                  <DeadlineCard />
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs font-semibold tracking-wider mb-3 px-1">メニュー</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {MENU_ITEMS.map((item) => (
-                      <button key={item.label}
-                        onClick={() => { if (item.screen) onNavigate(item.screen) }}
-                        className="flex items-center gap-3 bg-white border border-gray-200 rounded-2xl p-4 text-left shadow-sm hover:bg-gray-50 transition-all">
-                        <div className={`w-10 h-10 ${item.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 text-white`}>
-                          {item.icon}
-                        </div>
-                        <div>
-                          <p className="text-gray-900 text-sm font-semibold">{item.label}</p>
-                          <p className="text-gray-400 text-xs mt-0.5">{item.sub}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 右カラム（2/5） */}
-              <div className="col-span-2 flex flex-col gap-4">
-
-                {/* 税制情報カード */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-                  <p className="text-gray-400 text-xs font-semibold tracking-wider mb-4">2026年 年収の壁</p>
-                  <div className="flex flex-col gap-3">
-                    {[
-                      { label: '所得税の壁', amount: WALL_LABELS.incomeTax, color: 'text-sky-500',    note: '2026年分〜',      changed: true  },
-                      { label: '住民税の壁', amount: WALL_LABELS.residentTax, color: 'text-purple-500', note: `${WALL_LABELS.residentTax}超から課税`, changed: true  },
-                      { label: '社保の扶養', amount: WALL_LABELS.dependentInsurance, color: 'text-amber-500',  note: '変更無し',         changed: false },
-                    ].map((w) => (
-                      <div key={w.label} className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
-                        <div>
-                          <p className="text-gray-700 text-sm font-medium">{w.label}</p>
-                          <p className="text-gray-400 text-xs">{w.note}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className={`${w.color} text-sm font-bold`}>{w.amount}</p>
-                          {w.changed && (
-                            <span className="text-xs bg-sky-50 text-sky-500 px-1.5 py-0.5 rounded-md">改正</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* お知らせカード */}
-                <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-                  <p className="text-gray-400 text-xs font-semibold tracking-wider mb-4">お知らせ</p>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                      <span className="text-base flex-shrink-0">⚠️</span>
-                      <div>
-                        <p className="text-amber-700 text-xs font-semibold">
-                          確定申告期限まで残り{Math.max(Math.ceil((new Date('2027-03-15').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)), 0)}日
-                        </p>
-                        <p className="text-amber-500 text-xs mt-0.5">締め切り {FILING_DEADLINE_FULL_LABEL}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3">
-                      <span className="text-base flex-shrink-0">💡</span>
-                      <p className="text-gray-500 text-xs leading-relaxed">
-                        申告すれば数千〜数万円が戻ってくることがあります
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 免責事項 */}
-          <div className="mt-auto py-6">
-            <p className="text-gray-400 text-xs text-center leading-relaxed">
-              ※ 本アプリの情報は参考情報です。最終的な判断は税務署または税理士にご相談ください。
-            </p>
+          <div className="flex flex-col gap-4">
+            {latestResult && <LastResultCard result={latestResult} profile={profile} onNavigate={onNavigate} />}
+            {showWalls ? <WallList profile={profile} /> : <RefundHints onNavigate={onNavigate} />}
+            <DeadlineCard />
           </div>
         </div>
-      </div>
 
-      {/* パスワード変更モーダル */}
-      {showPasswordModal && (
-        <PasswordChangeModal onClose={() => setShowPasswordModal(false)} />
-      )}
-    </>
+        <p className="text-[11.5px] text-muted text-center leading-relaxed pt-2 m-0">
+          このアプリの情報は参考情報です。最終的な判断は、税務署または税理士にご確認ください。
+        </p>
+      </main>
+
+      {showPasswordModal && <PasswordChangeModal onClose={() => setShowPasswordModal(false)} />}
+    </AppShell>
   )
 }

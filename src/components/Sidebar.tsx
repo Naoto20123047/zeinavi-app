@@ -3,6 +3,8 @@ import { auth } from '../lib/firebase'
 import { trackEvent, AnalyticsEvents } from '../lib/analytics'
 import { Icons } from './Icons'
 import { NAV_ITEMS, type ScreenId } from './navigation'
+import { FILING_DEADLINE_FULL_LABEL, TAX_YEAR } from '../config/taxConfig'
+import { daysUntilDeadline } from '../utils/dates'
 
 interface SidebarProps {
   active: ScreenId
@@ -16,7 +18,7 @@ export default function Sidebar({
   active,
   onNavigate,
   onPasswordChange,
-  subtitle = '学生向け PWA',
+  subtitle = `${TAX_YEAR}年分（令和8年分）`,
 }: SidebarProps) {
   const email = auth.currentUser?.email ?? ''
   const initial = email.charAt(0).toUpperCase() || '?'
@@ -31,29 +33,28 @@ export default function Sidebar({
   }
 
   return (
-    <div className="w-56 flex-shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col p-4">
-      <div className="flex items-center gap-3 px-2 mb-8 mt-2">
-        <div className="w-8 h-8 bg-sky-500 rounded-lg flex items-center justify-center text-white">
-          {Icons.diagnose}
-        </div>
-        <div>
-          <p className="text-white text-sm font-bold leading-none">確定申告ナビ</p>
-          <p className="text-sky-400 text-xs">{subtitle}</p>
+    <div className="w-[248px] flex-shrink-0 bg-navy-900 text-white flex flex-col px-4 pt-7 pb-5 min-h-screen sticky top-0 h-screen">
+      <div className="flex items-center gap-2.5 px-2">
+        <svg width="30" height="34" viewBox="0 0 56 64" aria-hidden="true">
+          <path d="M6 4h30l14 14v40a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="#FFFFFF" />
+          <path d="M36 4v12a2 2 0 0 0 2 2h12" fill="#CFE3F3" />
+          <path d="M16 38l8 8 16-17" fill="none" stroke="#4AA8E8" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <div className="flex flex-col">
+          <span className="font-display text-lg font-black">確定申告ナビ</span>
+          <span className="text-[11px] text-slate-400">{subtitle}</span>
         </div>
       </div>
 
-      <nav className="flex flex-col gap-1 flex-1">
-        <p className="text-slate-500 text-xs font-semibold px-3 mb-2 tracking-wider">MENU</p>
+      <nav aria-label="メインメニュー" className="flex flex-col gap-1 mt-8">
         {NAV_ITEMS.map((item) => (
           <button
             key={item.id}
             type="button"
             aria-current={active === item.id ? 'page' : undefined}
             onClick={() => onNavigate(item.id)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-              active === item.id
-                ? 'bg-sky-500/10 text-sky-400 font-semibold border-l-2 border-sky-500'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 border-l-2 border-transparent'
+            className={`flex items-center gap-3 h-11 px-3 rounded-xl text-sm font-bold text-left transition-colors ${
+              active === item.id ? 'bg-navy-700 text-white' : 'text-slate-400 hover:text-white hover:bg-navy-800'
             }`}
           >
             {item.icon}
@@ -62,33 +63,38 @@ export default function Sidebar({
         ))}
       </nav>
 
-      <div className="border-t border-slate-700 pt-4 px-2">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-sky-500 to-purple-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-xs font-bold">{initial}</span>
-          </div>
-          <p className="text-slate-400 text-xs flex-1 truncate">{email}</p>
+      <div className="mt-auto flex flex-col gap-3">
+        <div className="bg-navy-800 rounded-[14px] p-3.5 flex flex-col gap-0.5">
+          <span className="text-[11.5px] text-slate-400">申告期限まで</span>
+          <span className="font-display text-2xl font-black tabular-nums">{daysUntilDeadline()}<span className="text-[13px] ml-0.5">日</span></span>
+          <span className="text-[11px] text-slate-400">{FILING_DEADLINE_FULL_LABEL}</span>
         </div>
 
-        {showPasswordChange && (
-          <button
-            type="button"
-            onClick={onPasswordChange}
-            className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 text-xs transition-colors mb-1"
-          >
-            {Icons.key}
-            パスワードを変更
+        <div className="border-t border-navy-700 pt-3 px-1 flex flex-col gap-1">
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-[34px] h-[34px] rounded-full bg-navy-600 grid place-items-center flex-shrink-0">
+              <span className="text-xs font-bold">{initial}</span>
+            </div>
+            <p className="text-[11px] text-slate-400 flex-1 truncate m-0">{email}</p>
+          </div>
+          <button type="button" onClick={() => onNavigate('profile')}
+            className="flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 text-xs transition-colors">
+            {Icons.user}
+            プロフィールを変更
           </button>
-        )}
-
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 text-xs transition-colors"
-        >
-          {Icons.logout}
-          ログアウト
-        </button>
+          {showPasswordChange && (
+            <button type="button" onClick={onPasswordChange}
+              className="flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 text-xs transition-colors">
+              {Icons.key}
+              パスワードを変更
+            </button>
+          )}
+          <button type="button" onClick={handleSignOut}
+            className="flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-navy-800 text-xs transition-colors">
+            {Icons.logout}
+            ログアウト
+          </button>
+        </div>
       </div>
     </div>
   )

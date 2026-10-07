@@ -7,6 +7,8 @@ import {
   createUserWithEmailAndPassword,
 } from 'firebase/auth'
 import { trackEvent, AnalyticsEvents } from '../lib/analytics'
+import Logo from '../components/Logo'
+import { Icons } from '../components/Icons'
 
 /** Firebase Auth の最小パスワード長 */
 const MIN_PASSWORD_LENGTH = 6
@@ -127,7 +129,7 @@ function LoginForm() {
           disabled={loading}
           className="w-full bg-sky-500 hover:bg-sky-400 text-white font-bold rounded-xl py-3 text-sm mt-1 disabled:opacity-50 transition-colors"
         >
-          {loading ? '処理中...' : mode === 'login' ? 'ログイン' : 'アカウントを作成'}
+          {loading ? '処理しています' : mode === 'login' ? 'ログイン' : 'アカウントを作成'}
         </button>
       </form>
 
@@ -149,8 +151,8 @@ export default function LoginScreen() {
       {/* ── モバイル表示 ── */}
       <div className="md:hidden min-h-screen bg-slate-900 flex flex-col justify-between px-6 py-12">
         <div className="text-center mt-6">
-          <div className="w-16 h-16 bg-sky-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-white text-2xl">📋</span>
+          <div className="w-16 h-16 bg-navy-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Logo size={32} />
           </div>
           <h1 className="text-white text-2xl font-bold mb-1">確定申告ナビ</h1>
           <p className="text-slate-400 text-sm">税知識ゼロでも、必要な申告がわかる</p>
@@ -167,8 +169,8 @@ export default function LoginScreen() {
         <div className="w-1/2 bg-gradient-to-br from-slate-800 to-slate-900 flex flex-col justify-between p-12 border-r border-slate-700">
           {/* ロゴ */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-sky-500 rounded-xl flex items-center justify-center">
-              <span className="text-white text-lg">📋</span>
+            <div className="w-10 h-10 bg-navy-800 rounded-xl flex items-center justify-center">
+              <Logo size={22} />
             </div>
             <div>
               <p className="text-white font-bold text-lg leading-none">確定申告ナビ</p>
@@ -182,22 +184,22 @@ export default function LoginScreen() {
               <span className="text-sky-400">自分に必要な申告</span>がわかる
             </h2>
             <p className="text-slate-400 text-base leading-relaxed">
-              バイト・業務委託・フリマ収入がある学生向けに、
-              確定申告が必要かどうかを7つの質問で診断。
-              還付金を受け取り損ねている学生を0に。
+              アルバイトの学生も、副業のある会社員も。
+              質問に答えるだけで、確定申告が必要かどうかと、
+              納める額・戻る額の見込みがわかります。
             </p>
           </div>
 
           {/* 特徴リスト */}
           <div className="flex flex-col gap-4">
             {[
-              { icon: '📋', title: '申告必要か診断', desc: '7つの質問で即判定' },
-              { icon: '📚', title: 'ケース別ガイド', desc: 'バイト・業務委託・フリマに対応' },
-              { icon: '🤖', title: 'AIチャット', desc: '確定申告の疑問をすぐ解決' },
+              { icon: Icons.diagnose, title: '申告が必要か診断', desc: '答えるたびに見込み額を表示' },
+              { icon: Icons.book, title: 'ケース別ガイド', desc: '給料・副業・控除の手順' },
+              { icon: Icons.chat, title: 'AIに相談', desc: '言葉の意味などを質問できます' },
             ].map((f) => (
               <div key={f.title} className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-slate-700 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <span className="text-lg">{f.icon}</span>
+                  <span className="text-white">{f.icon}</span>
                 </div>
                 <div>
                   <p className="text-white text-sm font-semibold">{f.title}</p>
@@ -213,7 +215,7 @@ export default function LoginScreen() {
           <div className="w-full max-w-sm">
             <h3 className="text-white text-2xl font-bold mb-2">ログイン</h3>
             <p className="text-slate-400 text-sm mb-8">
-              アカウントにログインして申告診断を始めましょう
+              ログインすると、診断や記録を保存できます
             </p>
             <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
               <LoginForm />

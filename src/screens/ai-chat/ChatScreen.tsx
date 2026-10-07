@@ -97,7 +97,7 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
   const INITIAL_MESSAGE: Message = {
     id: 0,
     role: 'assistant',
-    text: 'こんにちは！確定申告ナビAIです。\n\n確定申告に関するご質問にお答えします。下のクイック質問からお選びいただくか、自由に入力してください。\n\n⚠️ 回答はあくまで参考情報です。正確な判断は税務署または税理士にご相談ください。',
+    text: '確定申告ナビのAIです。\n\n確定申告や税金の言葉について、わかりやすくお答えします。下の質問例を選ぶか、自由に入力してください。\n\n回答は参考情報です。具体的な判断は、税務署または税理士にご確認ください。',
   }
 
   const [messages,  setMessages]  = useState<Message[]>([INITIAL_MESSAGE])
@@ -208,7 +208,7 @@ function ChatBody({ onNavigate }: { onNavigate: (s: string) => void }) {
 
       {/* 残り回数 + 免責事項 */}
       <div className="border-t border-gray-100 px-4 py-2 flex justify-between items-center">
-        <p className="text-gray-400 text-xs">⚠️ 回答は参考情報です。税務判断は専門家にご相談ください。</p>
+        <p className="text-gray-400 text-xs">回答は参考情報です。具体的な判断は専門家にご確認ください。</p>
         {!isLimit && (
           <span className="text-gray-400 text-xs flex-shrink-0">
             {usageLoading ? '...' : `残り${remaining}回`}
