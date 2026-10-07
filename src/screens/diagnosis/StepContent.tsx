@@ -1,5 +1,6 @@
 // 診断の質問1つ分の表示（見出し・説明・選択肢）
 import type { ReactNode } from 'react'
+import type { RecordSummary } from '../../utils/recordsToAnswers'
 import {
   RadioChoice,
   CheckChoice,
@@ -46,6 +47,18 @@ function Question({ title, lead, children }: { title: string; lead?: string; chi
     </div>
   )
 }
+
+/** 記録から下書きを入れたことを知らせる */
+function RecordNote({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-[14px] border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] leading-relaxed text-ink">
+      <span className="font-bold text-brand-600 mr-2">記録から入れました</span>
+      {children}
+    </div>
+  )
+}
+
+const yen = (n: number) => `${n.toLocaleString()}円`
 
 function BirthYearSelect({ id, label, value, onChange }: {
   id: string; label: string; value: number | null; onChange: (v: number | null) => void
@@ -185,11 +198,13 @@ function FamilyCard({ index, m, onChange, onRemove }: {
 }
 
 // ── 本体 ────────────────────────────────────────────────
-export default function StepContent({ id, profile, answers: a, update, onEditProfile }: {
+export default function StepContent({ id, profile, answers: a, update, records = null, onEditProfile }: {
   id: StepId
   profile: Profile
   answers: DiagnosisAnswers
   update: Update
+  /** 記録を使って始めたときだけ渡される */
+  records?: RecordSummary | null
   onEditProfile: () => void
 }) {
   const setEmployer = (i: number, patch: Partial<Employer>) =>
@@ -250,12 +265,29 @@ export default function StepContent({ id, profile, answers: a, update, onEditPro
         </Question>
       )
 
+    case 'prepaid':
+      return (
+        <Question
+          title={`${TAX_YEAR}年の所得税の一部を、「予定納税」で先に納めましたか`}
+          lead="前の年の所得税が15万円以上だった人には、税務署から7月と11月に納める通知が届きます。通知が届いていなければ「いいえ」です。"
+        >
+          <YesNoUnknownChoices value={a.prepaidTax ?? ''} onChange={(v) => update({ prepaidTax: v })} />
+        </Question>
+      )
+
     case 'incomeKinds':
       return (
         <Question
           title={`${TAX_YEAR}年に受け取ったお金をすべて選んでください`}
           lead="1月から12月までに受け取ったものです。少額でも選んでください。税金がかからないものも、ここで選んでおくと判定から外せます。"
         >
+          {records && (records.partTime.count + records.freelance.count + records.flea.count + records.other.count > 0) && (
+            <RecordNote>
+              {records.partTime.count + records.freelance.count > 0 && '記録にあるアルバイト・業務委託を選んでおきました。'}
+              {records.flea.count > 0 && `フリマの記録（${yen(records.flea.total)}）があります。自分が使っていた物なら「自分が使っていた物をフリマで売った」、作った物・仕入れた物なら「作った物・仕入れた物の販売」を選んでください。`}
+              {records.other.count > 0 && `その他の収入の記録（${yen(records.other.total)}）があります。当てはまるものを選んでください。`}
+            </RecordNote>
+          )}
           <div className="flex flex-col gap-2">
             {INCOME_OPTIONS.map((o) => (
               <CheckChoice
@@ -281,6 +313,9 @@ export default function StepContent({ id, profile, answers: a, update, onEditPro
           title="給料をもらった勤務先はいくつですか"
           lead="年の途中でやめた勤務先や、短期・単発のアルバイトも1か所として数えてください。"
         >
+          {records && records.partTime.count > 0 && (
+            <RecordNote>記録の振り込み元の数（{records.partTime.sources.length}か所）から選んでおきました。同じ勤務先が別の名前で記録されていないか確認してください。</RecordNote>
+          )}
           <div className="flex flex-col gap-2">
             {([['1', '1か所'], ['2', '2か所'], ['3+', '3か所以上']] as [JobCount, string][]).map(([v, l]) => (
               <RadioChoice
@@ -341,6 +376,9 @@ export default function StepContent({ id, profile, answers: a, update, onEditPro
           title="勤務先ごとに、給料と引かれた金額を入れてください"
           lead="源泉徴収票があれば、その数字をそのまま写してください。1月以降に勤務先からもらえます。"
         >
+          {records && records.partTime.count > 0 && (
+            <RecordNote>振り込み元ごとの合計を「1年間の給料」に入れました。記録は振り込まれた額（手取り）なので、源泉徴収票の「支払金額」より少なくなります。源泉徴収票があれば、そちらの数字に直してください。</RecordNote>
+          )}
           <div className="flex flex-col gap-3">
             {a.employers.map((e, i) => (
               <EmployerCard
@@ -381,6 +419,11 @@ export default function StepContent({ id, profile, answers: a, update, onEditPro
     case 'freelance':
       return (
         <Question title="業務委託・フリーランスの報酬について教えてください" lead="1年分の合計です。">
+          {records && records.freelance.count > 0 && (
+            <RecordNote>
+              業務委託の記録の合計（{yen(records.freelance.total)}）を報酬に、経費の記録の合計（{yen(records.expense.total)}）を経費に入れました。報酬から税金が引かれている場合、記録は引かれた後の額なので、支払調書の「支払金額」に直してください。経費には、この仕事に関係ないものを含めないでください。
+            </RecordNote>
+          )}
           <YenField id="fl-rev" label="受け取った報酬の合計" sub="引かれた税金を足す前の額（支払調書の「支払金額」）です。" value={a.freelanceRevenue} onChange={(v) => update({ freelanceRevenue: v })} />
           <YenField id="fl-exp" label="仕事のために使ったお金（経費）" sub="交通費・材料費・ソフト代など、その仕事のために使った分です。" value={a.freelanceExpense} onChange={(v) => update({ freelanceExpense: v })} />
           <YenField id="fl-wh" label="報酬から引かれた税金" sub="支払調書の「源泉徴収税額」です。引かれていなければ空欄です。" value={a.freelanceWithheld} onChange={(v) => update({ freelanceWithheld: v })} />
@@ -452,6 +495,16 @@ export default function StepContent({ id, profile, answers: a, update, onEditPro
               <RadioChoice key={v} label={l} sub={sub} selected={a.stockMethod === v} onClick={() => update({ stockMethod: v })} />
             ))}
           </div>
+          {a.stockMethod !== '' && a.stockMethod !== 'other' && (
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-bold">前の年までの株・投資信託の損失を、確定申告で繰り越していますか</span>
+              <YesNoUnknownChoices
+                value={a.carryoverLoss ?? ''}
+                onChange={(v) => update({ carryoverLoss: v })}
+                yesSub="去年までの確定申告で「損失の繰越」をした場合です。繰り越した損失を使うには、今年も申告が必要です"
+              />
+            </div>
+          )}
         </Question>
       )
 
@@ -482,7 +535,7 @@ export default function StepContent({ id, profile, answers: a, update, onEditPro
       return (
         <Question
           title={`${TAX_YEAR}年に自分で払ったお金を選んでください`}
-          lead="給料から引かれた保険料は、さきほど入れたので含めません。自分で払ったものだけです。"
+          lead="年末調整で勤務先に出した保険料（生命保険料・地震保険料・国民年金など）も含めて選んでください。給料から引かれた社会保険料は、さきほど入れたので含めません。"
         >
           <div className="flex flex-col gap-2">
             {PAID_OPTIONS.map((o) => (

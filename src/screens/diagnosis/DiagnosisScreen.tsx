@@ -4,6 +4,8 @@ import AppShell from '../../components/AppShell'
 import { Icons } from '../../components/Icons'
 import { Progress } from '../../components/ui'
 import { useDiagnosisResults } from '../../hooks/useDiagnosisResult'
+import { useIncomes, useExpenses } from '../../hooks/useRecords'
+import { summarizeRecords, hasRecords, applyRecords } from '../../utils/recordsToAnswers'
 import { trackEvent, AnalyticsEvents } from '../../lib/analytics'
 import { TAX_YEAR } from '../../config/taxConfig'
 import type { Profile } from '../../types/profile'
@@ -35,6 +37,10 @@ export default function DiagnosisScreen({ onNavigate, profile }: {
   const steps   = useMemo(() => visibleSteps(profile, answers), [profile, answers])
   const outcome = useMemo(() => diagnose(profile, answers), [profile, answers])
   const walls   = useMemo(() => relevantWalls(profile), [profile])
+  const { incomes }  = useIncomes()
+  const { expenses } = useExpenses()
+  const records = useMemo(() => summarizeRecords(incomes, expenses, TAX_YEAR), [incomes, expenses])
+  const canUseRecords = hasRecords(records)
 
   // 前の回答で消えた質問にいた場合は、残っている直前の質問に戻る
   const index = Math.max(steps.indexOf(current), 0)
@@ -70,12 +76,12 @@ export default function DiagnosisScreen({ onNavigate, profile }: {
     mainRef.current?.focus({ preventScroll: true })
   }
 
-  const start = (from: DiagnosisAnswers) => {
+  const start = (from: DiagnosisAnswers, viaRecords = false) => {
     setAnswers({ ...from, profileConfirmed: false })
     setCurrent('confirm')
     shownWalls.current = new Set()
     setPhase('questions')
-    trackEvent(AnalyticsEvents.diagnosisStart, { resumed: from !== EMPTY_ANSWERS })
+    trackEvent(AnalyticsEvents.diagnosisStart, { resumed: from !== EMPTY_ANSWERS && !viaRecords, from_records: viaRecords })
     scrollTop()
   }
 
@@ -145,9 +151,32 @@ export default function DiagnosisScreen({ onNavigate, profile }: {
             </p>
           </div>
 
+          {canUseRecords && (
+            <div className="card p-5 flex flex-col gap-3">
+              <span className="text-sm font-bold">「記録」のデータを診断に使えます</span>
+              <ul className="text-[13.5px] leading-relaxed m-0 pl-5 list-disc">
+                {records.partTime.count > 0 && (
+                  <li>アルバイト {records.partTime.total.toLocaleString()}円（振り込み元 {records.partTime.sources.length}か所）</li>
+                )}
+                {records.freelance.count > 0 && <li>業務委託 {records.freelance.total.toLocaleString()}円</li>}
+                {records.flea.count > 0 && <li>フリマ {records.flea.total.toLocaleString()}円</li>}
+                {records.other.count > 0 && <li>その他の収入 {records.other.total.toLocaleString()}円</li>}
+                {records.expense.count > 0 && <li>経費 {records.expense.total.toLocaleString()}円</li>}
+              </ul>
+              <p className="text-[13px] text-muted leading-relaxed m-0">
+                {TAX_YEAR}年の記録だけを使います。使う場合は、質問の答えに記録の金額を下書きとして入れておきます。どの質問も画面で確認・修正できます。
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-col md:flex-row gap-3">
-            <button type="button" className="btn-primary md:flex-1" onClick={() => start(EMPTY_ANSWERS)}>
-              はじめる
+            {canUseRecords && (
+              <button type="button" className="btn-primary md:flex-1" onClick={() => start(applyRecords(EMPTY_ANSWERS, records), true)}>
+                記録を使ってはじめる
+              </button>
+            )}
+            <button type="button" className={canUseRecords ? 'btn-secondary md:flex-1' : 'btn-primary md:flex-1'} onClick={() => start(EMPTY_ANSWERS)}>
+              {canUseRecords ? '記録を使わずにはじめる' : 'はじめる'}
             </button>
             {previous && (
               <button type="button" className="btn-secondary md:flex-1" onClick={() => start(previous)}>
@@ -238,6 +267,7 @@ export default function DiagnosisScreen({ onNavigate, profile }: {
             profile={profile}
             answers={answers}
             update={update}
+            records={answers.fromRecords ? records : null}
             onEditProfile={() => onNavigate('profile')}
           />
 

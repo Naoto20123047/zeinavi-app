@@ -131,6 +131,11 @@ export function diagnose(p: Profile, a: DiagnosisAnswers): DiagnosisOutcome {
 
   // ── 判定しないケース ──
   if (a.livedAbroad === 'yes') outOfScopeReasons.push('2026年の途中で海外に住んでいた期間がある')
+  if (a.prepaidTax === 'yes') outOfScopeReasons.push('予定納税で所得税の一部を先に納めた')
+  if (a.prepaidTax === 'unknown') pending.push('予定納税をしたか')
+  if (has(a, 'stocks') && a.stockMethod !== 'other' && a.carryoverLoss === 'yes') outOfScopeReasons.push('前の年までの株・投資信託の損失を繰り越している')
+  if (has(a, 'stocks') && a.stockMethod !== 'other' && a.carryoverLoss === 'unknown') pending.push('株・投資信託の損失を繰り越しているか')
+  if (!a.noPaid && a.paidKinds.includes('disaster')) outOfScopeReasons.push('災害・盗難の被害があった（雑損控除）')
   if (has(a, 'retirement')) outOfScopeReasons.push('退職金を受け取った')
   if (has(a, 'realEstate')) outOfScopeReasons.push('家賃収入など不動産のお金がある')
   if (has(a, 'other')) outOfScopeReasons.push('分類できないお金がある')
@@ -312,6 +317,21 @@ export function diagnose(p: Profile, a: DiagnosisAnswers): DiagnosisOutcome {
       tone: 'info',
       title: '住宅ローン控除（1年目）',
       body: '1年目は確定申告で受けます。控除額は借入残高の証明書などで計算するため、このアプリでは試算していません。',
+    })
+  }
+
+  // 年末調整を受けた1か所の給料だけなのに、計算した税額が引かれた額より多い場合は、
+  // 年末調整で出した控除（生命保険料など）の入れ忘れが考えられる
+  const adjustedOnly =
+    hasSalary && nonSalary === 0 &&
+    a.employers.filter((e) => pos(e.salary) > 0).length === 1 &&
+    a.employers.every((e) => pos(e.salary) === 0 || e.yearEnd === 'done')
+  if (adjustedOnly && paymentAmount > 0) {
+    notes.push({
+      kind: 'check',
+      tone: 'warn',
+      title: '年末調整で出した控除を確認してください',
+      body: '年末調整を受けているのに、計算した所得税が引かれた所得税より多くなりました。年末調整で勤務先に出した生命保険料・地震保険料・国民年金などを「自分で払ったお金」で選んでいるか確認してください。',
     })
   }
 

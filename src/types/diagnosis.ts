@@ -27,6 +27,7 @@ export type PaidKind =
   | 'earthquake'
   | 'ideco'
   | 'housingLoan'
+  | 'disaster'
 
 export type JobCount = '1' | '2' | '3+'
 export type JobTiming = 'concurrent' | 'sequential' | 'both'
@@ -55,10 +56,14 @@ export interface FamilyMember {
 
 export interface DiagnosisAnswers {
   version: 2
+  /** 収入・経費の記録から下書きを作ったか */
+  fromRecords?: boolean
 
   // A. 確認
   profileConfirmed: boolean
   livedAbroad:      YesNoUnknown | ''
+  /** 予定納税をしたか（学生以外に聞く） */
+  prepaidTax:       YesNoUnknown | ''
 
   // B. 受け取ったお金
   incomeKinds: IncomeKind[]
@@ -83,6 +88,8 @@ export interface DiagnosisAnswers {
   prizeAmount:        number
   cryptoProfit:       number
   stockMethod:        StockMethod | ''
+  /** 前の年までの株・投資信託などの損失を繰り越しているか */
+  carryoverLoss: YesNoUnknown | ''
   pensionAmount:      number
   pensionWithheld:    YesNoUnknown | ''
   otherNote:          string
@@ -141,6 +148,7 @@ export const EMPTY_ANSWERS: DiagnosisAnswers = {
   version: 2,
   profileConfirmed: false,
   livedAbroad: '',
+  prepaidTax: '',
   incomeKinds: [],
   noIncome: false,
   jobCount: '',
@@ -159,6 +167,7 @@ export const EMPTY_ANSWERS: DiagnosisAnswers = {
   prizeAmount: 0,
   cryptoProfit: 0,
   stockMethod: '',
+  carryoverLoss: '',
   pensionAmount: 0,
   pensionWithheld: '',
   otherNote: '',

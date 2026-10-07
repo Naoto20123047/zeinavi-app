@@ -5,6 +5,7 @@ import type { DiagnosisAnswers, IncomeKind, PaidKind } from '../../types/diagnos
 export type StepId =
   | 'confirm'
   | 'abroad'
+  | 'prepaid'
   | 'incomeKinds'
   | 'jobCount'
   | 'jobTiming'
@@ -30,6 +31,7 @@ export type StepId =
 export const STEP_GROUP: Record<StepId, string> = {
   confirm:              'はじめの確認',
   abroad:               'はじめの確認',
+  prepaid:              'はじめの確認',
   incomeKinds:          '受け取ったお金',
   jobCount:             '給料',
   jobTiming:            '給料',
@@ -72,19 +74,22 @@ export const INCOME_OPTIONS: { value: IncomeKind; label: string; sub?: string }[
 export const PAID_OPTIONS: { value: PaidKind; label: string; sub?: string }[] = [
   { value: 'nationalPension', label: '国民年金保険料', sub: '学生納付特例で猶予中の期間は払っていない扱いです' },
   { value: 'nationalHealth',  label: '国民健康保険料' },
-  { value: 'medical',         label: '医療費', sub: '自分や同じ家計の家族の分' },
+  { value: 'medical',         label: '医療費', sub: '自分や同じ家計の家族の分。市販薬だけの場合はセルフメディケーション税制が使えることがあります（このアプリでは計算しません）' },
   { value: 'donation',        label: 'ふるさと納税・寄付' },
-  { value: 'lifeInsurance',   label: '生命保険料', sub: '自分が契約者のもの' },
+  { value: 'lifeInsurance',   label: '生命保険料', sub: '自分が契約者のもの。年末調整で勤務先に出した分も含めます' },
   { value: 'earthquake',      label: '地震保険料' },
   { value: 'ideco',           label: 'iDeCoの掛金' },
   { value: 'housingLoan',     label: '住宅ローン' },
+  { value: 'disaster',        label: '災害・盗難の被害', sub: '地震・火事・盗難などで、住まいや家財に損害を受けた' },
 ]
 
 const hasIncome = (a: DiagnosisAnswers, k: IncomeKind) => !a.noIncome && a.incomeKinds.includes(k)
 
 /** 今の回答とプロフィールから、出す質問を順番に並べる */
 export function visibleSteps(p: Profile, a: DiagnosisAnswers): StepId[] {
-  const s: StepId[] = ['confirm', 'abroad', 'incomeKinds']
+  const s: StepId[] = ['confirm', 'abroad']
+  if (p.role !== 'student') s.push('prepaid')
+  s.push('incomeKinds')
   if (hasIncome(a, 'salary')) {
     s.push('jobCount')
     if (a.jobCount === '2' || a.jobCount === '3+') s.push('jobTiming')
@@ -130,7 +135,8 @@ export function isStepAnswered(id: StepId, a: DiagnosisAnswers): boolean {
     case 'reward':      return a.rewardAmount > 0
     case 'prize':       return a.prizeAmount > 0
     case 'crypto':      return true // 損失なら0円で進める
-    case 'stocks':      return a.stockMethod !== ''
+    case 'prepaid':     return !!a.prepaidTax
+    case 'stocks':      return a.stockMethod !== '' && (a.stockMethod === 'other' || !!a.carryoverLoss)
     case 'pension':     return a.pensionAmount > 0 && a.pensionWithheld !== ''
     case 'other':       return a.otherNote.trim() !== ''
     case 'paidKinds':   return a.noPaid || a.paidKinds.length > 0
